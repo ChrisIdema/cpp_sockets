@@ -3,6 +3,7 @@ on:
   push:
     branches:
       - master
+      - non_blocking
   pull_request:
     branches:
       - master
