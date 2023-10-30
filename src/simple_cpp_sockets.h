@@ -43,31 +43,16 @@ protected:
     int set_address(const std::string& ip_address);
 
 private:
-#ifdef WIN32
+#ifdef _WIN32
     // Number of sockets is tracked to call WSACleanup on Windows
     static int s_count;
 #endif
 };
 
-#ifdef WIN32
+#ifdef _WIN32
 // Initialize s_count on windows
 int Socket::s_count{ 0 };
 #endif
-
-class UDPClient : public Socket
-{
-public:
-    UDPClient(u_short port = 8000, const std::string& ip_address = "127.0.0.1");
-    ssize_t send_message(const std::string& message);
-};
-
-class UDPServer : public Socket
-{
-public:
-    UDPServer(u_short port = 8000, const std::string& ip_address = "0.0.0.0");
-    int socket_bind();
-    void listen();
-};
 
 class TCPClient : public Socket
 {
@@ -81,7 +66,7 @@ class TCPServer : public Socket
 {
 public:
     TCPServer(u_short port, const std::string& ip_address = "0.0.0.0");
-    int socket_bind();
+    int socket_bind();// todo rename bind and listen?
 };
 
 Socket::Socket(const SocketType socket_type) : m_socket(), m_addr()
@@ -134,64 +119,6 @@ Socket::~Socket()
 Socket::~Socket() = default;
 #endif
 
-
-UDPClient::UDPClient(u_short port, const std::string& ip_address) : Socket(SocketType::TYPE_DGRAM)
-{
-    set_address(ip_address);
-    set_port(port);
-    std::cout << "UDP Client created." << std::endl;
-};
-
-ssize_t UDPClient::send_message(const std::string& message)
-{
-    size_t message_length = message.length();
-    return sendto(m_socket, message.c_str(), message_length, 0, reinterpret_cast<sockaddr*>(&m_addr), sizeof(m_addr));
-};
-
-UDPServer::UDPServer(u_short port, const std::string& ip_address) : Socket(SocketType::TYPE_DGRAM)
-{
-    set_port(port);
-    set_address(ip_address);
-    std::cout << "UDP Server created." << std::endl;
-}
-
-int UDPServer::socket_bind()
-{
-    if (bind(m_socket, reinterpret_cast<sockaddr*>(&m_addr), sizeof(m_addr)) == SOCKET_ERROR)
-    {
-        std::cout << "UDP Bind error." << std::endl;
-#ifdef WIN32
-        std::cout << WSAGetLastError() << std::endl;
-#endif
-        return socket_bind_err;
-    }
-    std::cout << "UDP Socket Bound." << std::endl;
-    return 0;
-}
-
-void UDPServer::listen()
-{
-    sockaddr_in client;
-    char client_ip[INET_ADDRSTRLEN];
-    socklen_t slen = sizeof(client);
-    char message_buffer[512];
-    std::cout << "Waiting for data..." << std::endl;
-
-    while(true)
-    {
-        // This is a blocking call
-        ssize_t recv_len = recvfrom(m_socket, message_buffer, sizeof(message_buffer), 0, reinterpret_cast<sockaddr*>(&client), &slen);
-        if (recv_len == SOCKET_ERROR)
-        {
-            std::cout << "Receive Data error." << std::endl;
-#ifdef WIN32
-            std::cout << WSAGetLastError() << std::endl;
-#endif
-        }
-        std::cout << "Received packet from " << inet_ntop(AF_INET, &client.sin_addr, client_ip, INET_ADDRSTRLEN) << ':' << ntohs(client.sin_port) << std::endl;
-        std::cout << message_buffer << std::endl;
-    }
-}
 
 TCPClient::TCPClient(u_short port, const std::string& ip_address) : Socket(SocketType::TYPE_STREAM)
 {
