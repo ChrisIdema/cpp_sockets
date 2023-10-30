@@ -1,6 +1,8 @@
 //#include "simple_cpp_sockets.h"
+#include "simple_cpp_sockets2.h"
 
-//#include <thread> 
+#include <thread> 
+#include <string>
 
 
 #include <cstdio>
@@ -10,16 +12,39 @@
 #define NC "\033[0m"
 
 
-static void server_thread(int params)
+
+struct Server_params
 {
+    std::string server_ip;
+    uint16_t server_port;
+};
+
+static void server_thread(Server_params& params)
+{
+    Server_socket socket;
+
+    socket.init(Server_socket::SOCK_STREAM, "192.168.1.45", 60000);
 
 }
 
-static void client_thread(int params)
+struct Client_params
 {
+    std::string server_ip;
+    uint16_t server_port;
+
+    int client_id;
+
+    //semaphore
+};
+
+static void client_thread(Client_params& params)
+{
+
 }
 
 int main() {
+
+    simple_socket_init();
 
     //create semaphore
     //start server thread
@@ -31,7 +56,9 @@ int main() {
     //client 2 join
     //close server
     //server join
-    //verify results (passed by pointer)
+    //verify results (passed by pointer/reference)
+
+
 
 
     fprintf(stderr, RED "[ERROR]" NC ": test1() failed!\n");
