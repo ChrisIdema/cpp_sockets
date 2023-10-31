@@ -30,11 +30,11 @@ typedef int SOCKET;
 // Number of sockets is tracked to call WSACleanup on Windows
 extern int socket_count;
 extern std::mutex socket_mutex;
+extern WSADATA wsa;
 
 
 static int simple_socket_init(int* wsa_error=nullptr)
 {
-    WSADATA wsa;
     int res;
     res = WSAStartup(MAKEWORD(2, 2), &wsa);
 
@@ -76,6 +76,7 @@ class Simple_socket_instance
 };
 
 //thread safe bind function
+//for wsa_error codes see: https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
 static int ts_bind(SOCKET socket, const struct sockaddr* name, int namelen, int* wsa_error=nullptr)
 {
     const std::lock_guard<std::mutex> lock(socket_mutex); // needed because WSAGetLastError not thread safe
@@ -92,6 +93,8 @@ static int ts_bind(SOCKET socket, const struct sockaddr* name, int namelen, int*
     return res;
 }
 
+//thread safe accept function
+//for wsa_error codes see: https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
 static int ts_accept(SOCKET socket, struct sockaddr* addr, int* addrlen, int* wsa_error=nullptr)
 {
     const std::lock_guard<std::mutex> lock(socket_mutex); // needed because WSAGetLastError not thread safe
@@ -159,7 +162,9 @@ public:
 
         if (m_type != SocketType::UNKNOWN && address_valid)
         {
-            m_socket = socket(AF_INET, static_cast<int>(m_type), 0);  
+            // m_socket = socket(AF_INET, static_cast<int>(m_type), 0);  
+            m_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+
             printf("m_socket: %d\n",m_socket);
             if (m_socket == INVALID_SOCKET)
             {
@@ -171,7 +176,28 @@ public:
                 m_addr.sin_family = AF_INET;
 
                 int wsa_error = 0;
-                ts_bind(m_socket, (const sockaddr *)&m_addr, sizeof(m_addr),&wsa_error);
+                int res;
+                // res = ts_bind(m_socket, (const sockaddr *)&m_addr, sizeof(m_addr),&wsa_error);
+                // printf("ts_bind: %d\n",res);
+
+                // sockaddr_in service;
+                // hostent *thisHost;
+                // char *ip;
+                // u_short port;
+                // port = 60000;
+                // thisHost = gethostbyname("");
+                // ip = inet_ntoa(*(struct in_addr *) *thisHost->h_addr_list);
+
+                // service.sin_family = AF_INET;
+                // service.sin_addr.s_addr = inet_addr(ip);
+                // service.sin_port = htons(port);
+
+                // res = ::bind(m_socket, (SOCKADDR *) & service, sizeof (service));
+
+                // printf("ts_bind: %d\n",res);
+
+                bind();
+
             }
         }
 
@@ -213,8 +239,9 @@ public:
     int setsockopt()
     {
         #ifdef WIN32
-        bool yes=true;        // for setsockopt() SO_REUSEADDR, below
-        int res = ::setsockopt(m_socket, SOL_SOCKET, SO_KEEPALIVE, (char *)&yes, sizeof(yes));
+        BOOL bOptVal = FALSE;
+        int bOptLen = sizeof (BOOL);
+        int res = ::setsockopt(m_socket, SOL_SOCKET, SO_KEEPALIVE, (char *)&bOptVal, sizeof(bOptLen));
         #else
         const int yes=1;        // for setsockopt() SO_REUSEADDR, below
         int res = ::setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
@@ -228,7 +255,8 @@ public:
 
     int bind()
     {
-        int res = ::bind(m_socket,(const sockaddr *)&m_addr,sizeof(m_addr));
+        int wsa_error = 0;
+        int res = ts_bind(m_socket,(const sockaddr *)&m_addr,sizeof(m_addr), &wsa_error);
         printf("bind res: %d\n",res);
         return res;
     }
@@ -292,13 +320,19 @@ public:
             m_initialized = m_socket.init(Socket::SocketType::STREAM, ip_address, port);
             if (m_initialized)
             {
-                m_socket.setsockopt();
-                m_socket.bind();
+                //m_socket.bind();
+                m_socket.setsockopt();                
 
                 int res = m_socket.listen(number_of_connections);
 
                 FD_SET(m_socket.get_raw_socket(),&m_socket_set);
-                m_socket_list.push_back(m_socket.get_raw_socket());        
+                m_socket_list.push_back(m_socket.get_raw_socket());    
+
+                // struct sockaddr_storage their_addr;
+                // socklen_t addr_size;
+                // int client_socket_fd = accept(m_socket.get_raw_socket(), (struct sockaddr *)&their_addr, &addr_size);
+                // FD_SET(client_socket_fd,&m_socket_set);
+                // m_socket_list.push_back(client_socket_fd);    
             }
         }
     }
@@ -347,14 +381,15 @@ public:
                     if (raw_socket == m_socket.get_raw_socket()) //server event
                     {                    
                         struct sockaddr_storage remoteaddr; // client address
-                        socklen_t addrlen;    
-                        int new_socket = accept(m_socket.get_raw_socket(), (struct sockaddr *)&remoteaddr, &addrlen);
+                        socklen_t addrlen = sizeof(remoteaddr);    
+                        int wsa_error = 0;
+                        int new_socket = ts_accept(m_socket.get_raw_socket(), (struct sockaddr *)&remoteaddr, &addrlen, &wsa_error);
 
-                        printf("server_event: %d\n", new_socket);
+                        printf("server_event\n");
 
                         if (new_socket == -1)
                         {
-                            printf("accept failed\n");
+                            printf("accept failed: %d\n", wsa_error);
                         } 
                         else {
                             FD_SET(new_socket, &m_socket_set); // add to master set

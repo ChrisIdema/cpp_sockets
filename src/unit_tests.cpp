@@ -60,24 +60,21 @@ int main() {
     Server_socket server;
     server.init("192.168.1.45", 60000);
 
-    auto events = server.wait_for_events();
-    for(const auto& event: events)
+    for(int i=0;i<4;++i)
     {
-        printf("event: %s\n", event.to_string().c_str());
+        auto events = server.wait_for_events();
+        for(const auto& event: events)
+        {
+            printf("event: %s\n", event.to_string().c_str());
+            if (event.event_code == Server_socket::Event_code::rx)
+            {
+                char buffer[100+1] = "";
+                recv(event.client,buffer, sizeof(buffer)-1,0);
+                printf("received: %s\n", buffer);
+            }
+        }
     }
 
-    events = server.wait_for_events();
-    for(const auto& event: events)
-    {
-        printf("event: %s\n", event.to_string().c_str());
-    }
-
-
-    events = server.wait_for_events();
-    for(const auto& event: events)
-    {
-        printf("event: %s\n", event.to_string().c_str());
-    }
 
 
     fprintf(stderr, RED "[ERROR]" NC ": test1() failed!\n");

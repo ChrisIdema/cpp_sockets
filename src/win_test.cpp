@@ -54,7 +54,7 @@ int main()
     hostent *thisHost;
     char *ip;
     u_short port;
-    port = 27015;
+    port = 60000;
     thisHost = gethostbyname("");
     ip = inet_ntoa(*(struct in_addr *) *thisHost->h_addr_list);
 
