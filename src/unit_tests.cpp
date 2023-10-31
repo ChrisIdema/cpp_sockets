@@ -70,10 +70,21 @@ int main() {
             {
                 char buffer[100+1] = "";
                 recv(event.client,buffer, sizeof(buffer)-1,0);
+                send(event.client, "Hi\n", 3, 0); // response
                 printf("received: %s\n", buffer);
+                
             }
         }
     }
+
+    // send to all clients:
+    auto connected_clients = server.get_client_list();
+    for(const auto& client: connected_clients)
+    {
+        send(client, "bye\n", 4, 0); 
+    }
+
+
 
     fprintf(stderr, RED "[ERROR]" NC ": test1() failed!\n");
     return -1; // Error: Process completed with exit code 255.

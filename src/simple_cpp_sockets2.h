@@ -423,6 +423,13 @@ public:
         return events;
     }
 
+    std::list<SOCKET> get_client_list()
+    {
+        std::list<SOCKET> client_list = m_socket_list;
+        client_list.remove(m_socket.get_raw_socket());
+        return m_socket_list;
+    }
+
     private:
 
     bool m_initialized;
