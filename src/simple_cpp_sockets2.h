@@ -27,11 +27,8 @@ typedef int SOCKET;
 
 #if defined(_WIN32)
 
-// Number of sockets is tracked to call WSACleanup on Windows
-extern int socket_count;
 extern std::mutex socket_mutex;
 extern WSADATA wsa;
-
 
 static int simple_socket_init(int* wsa_error=nullptr)
 {
@@ -119,7 +116,6 @@ static int ts_accept(SOCKET socket, struct sockaddr* addr, int* addrlen, int* ws
     #define ts_accept accept
 #endif
 
-#define STDIN 0  // file descriptor for standard input
 
 
 class Socket {
@@ -162,8 +158,8 @@ public:
 
         if (m_type != SocketType::UNKNOWN && address_valid)
         {
-            // m_socket = socket(AF_INET, static_cast<int>(m_type), 0);  
-            m_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            m_socket = socket(AF_INET, static_cast<int>(m_type), 0);  
+            //m_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 
             printf("m_socket: %d\n",m_socket);
             if (m_socket == INVALID_SOCKET)
@@ -174,30 +170,8 @@ public:
             {
                 initialized = true;
                 m_addr.sin_family = AF_INET;
-
-                int wsa_error = 0;
-                int res;
-                // res = ts_bind(m_socket, (const sockaddr *)&m_addr, sizeof(m_addr),&wsa_error);
-                // printf("ts_bind: %d\n",res);
-
-                // sockaddr_in service;
-                // hostent *thisHost;
-                // char *ip;
-                // u_short port;
-                // port = 60000;
-                // thisHost = gethostbyname("");
-                // ip = inet_ntoa(*(struct in_addr *) *thisHost->h_addr_list);
-
-                // service.sin_family = AF_INET;
-                // service.sin_addr.s_addr = inet_addr(ip);
-                // service.sin_port = htons(port);
-
-                // res = ::bind(m_socket, (SOCKADDR *) & service, sizeof (service));
-
-                // printf("ts_bind: %d\n",res);
-
                 bind();
-
+                setsockopt();  
             }
         }
 
@@ -216,7 +190,6 @@ public:
         m_addr.sin_port = htons(port);
         address_valid = true;      
         printf("inet_pton res: %d\n", res);
-
 
         return init();
     }
@@ -248,7 +221,6 @@ public:
         #endif
         
         printf("setsockopt res: %d\n",res);
-
 
         return res;
     }
@@ -289,11 +261,22 @@ private:
 // get sockaddr, IPv4 or IPv6:
 static void *get_in_addr(struct sockaddr *sa)
 {
-    if (sa->sa_family == AF_INET) {
+    if (sa->sa_family == AF_INET)
+    {
         return &(((struct sockaddr_in*)sa)->sin_addr);
     }
 
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+static USHORT get_in_port(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET)
+    {
+        return ((struct sockaddr_in*)sa)->sin_port;
+    }
+
+    return ((struct sockaddr_in6*)sa)->sin6_port;
 }
 
 
@@ -309,7 +292,7 @@ public:
     ~Server_socket()
     {
         //socket will be closed automatically
-        //close select
+        //close select?
     }
 
 
@@ -319,20 +302,11 @@ public:
         {        
             m_initialized = m_socket.init(Socket::SocketType::STREAM, ip_address, port);
             if (m_initialized)
-            {
-                //m_socket.bind();
-                m_socket.setsockopt();                
-
+            {    
                 int res = m_socket.listen(number_of_connections);
 
                 FD_SET(m_socket.get_raw_socket(),&m_socket_set);
                 m_socket_list.push_back(m_socket.get_raw_socket());    
-
-                // struct sockaddr_storage their_addr;
-                // socklen_t addr_size;
-                // int client_socket_fd = accept(m_socket.get_raw_socket(), (struct sockaddr *)&their_addr, &addr_size);
-                // FD_SET(client_socket_fd,&m_socket_set);
-                // m_socket_list.push_back(client_socket_fd);    
             }
         }
     }
@@ -363,7 +337,7 @@ public:
     std::vector<Event> wait_for_events()
     {
         std::vector<Event> events;
-        //Event event = {Event_code::no_event};
+
         if (m_initialized)
         {
             fd_set event_socket_set = m_socket_set;
@@ -381,6 +355,7 @@ public:
                     if (raw_socket == m_socket.get_raw_socket()) //server event
                     {                    
                         struct sockaddr_storage remoteaddr; // client address
+                        //struct sockaddr_in remoteaddr; // client address                        
                         socklen_t addrlen = sizeof(remoteaddr);    
                         int wsa_error = 0;
                         int new_socket = ts_accept(m_socket.get_raw_socket(), (struct sockaddr *)&remoteaddr, &addrlen, &wsa_error);
@@ -391,14 +366,16 @@ public:
                         {
                             printf("accept failed: %d\n", wsa_error);
                         } 
-                        else {
+                        else 
+                        {
                             FD_SET(new_socket, &m_socket_set); // add to master set
                             m_socket_list.push_back(new_socket);  
              
                             char remoteIP[INET6_ADDRSTRLEN];
                             const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
+                            int port = ntohs(get_in_port((struct sockaddr*)&remoteaddr));
 
-                            printf("selectserver: new connection from %s on socket %d\n", address, new_socket);
+                            printf("selectserver: new connection from %s:%d on socket %d\n", address,port, new_socket);
 
                             Event event = {Event_code::client_connected, raw_socket, 0};
                             events.push_back(event);
