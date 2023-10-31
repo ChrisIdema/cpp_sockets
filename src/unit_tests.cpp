@@ -75,8 +75,6 @@ int main() {
         }
     }
 
-
-
     fprintf(stderr, RED "[ERROR]" NC ": test1() failed!\n");
     return -1; // Error: Process completed with exit code 255.
 }
