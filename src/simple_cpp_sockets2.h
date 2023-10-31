@@ -22,7 +22,8 @@ typedef SSIZE_T ssize_t;
 typedef int SOCKET;
 #endif
 
-
+#include <vector>
+#include <list>
 
 #if defined(_WIN32)
 
@@ -162,12 +163,15 @@ public:
             printf("m_socket: %d\n",m_socket);
             if (m_socket == INVALID_SOCKET)
             {
-                
+                printf("error\n");
             }
             else
             {
                 initialized = true;
                 m_addr.sin_family = AF_INET;
+
+                int wsa_error = 0;
+                ts_bind(m_socket, (const sockaddr *)&m_addr, sizeof(m_addr),&wsa_error);
             }
         }
 
@@ -209,11 +213,13 @@ public:
     int setsockopt()
     {
         #ifdef WIN32
-        const char yes=1;        // for setsockopt() SO_REUSEADDR, below
+        bool yes=true;        // for setsockopt() SO_REUSEADDR, below
+        int res = ::setsockopt(m_socket, SOL_SOCKET, SO_KEEPALIVE, (char *)&yes, sizeof(yes));
         #else
         const int yes=1;        // for setsockopt() SO_REUSEADDR, below
-        #endif
         int res = ::setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+        #endif
+        
         printf("setsockopt res: %d\n",res);
 
 
@@ -234,11 +240,10 @@ public:
         return res;
     }
 
-    void add_to_fd_set(fd_set* p_fd_set)
+    SOCKET get_raw_socket() const
     {
-        FD_SET(STDIN, p_fd_set);
+        return m_socket;
     }
-
     // void send(void);
     // void recv(void);
 
@@ -253,15 +258,24 @@ private:
     int set_address(const std::string& ip_address);
 };
 
+// get sockaddr, IPv4 or IPv6:
+static void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET) {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
 
 
 class Server_socket
 {
 public:
     Server_socket()
+        : m_initialized(false)
     {
-        FD_ZERO(&m_master); // clear set
-        FD_ZERO(&m_read_fds); // clear set
+        FD_ZERO(&m_socket_set); // clear set
     }
 
     ~Server_socket()
@@ -278,13 +292,13 @@ public:
             m_initialized = m_socket.init(Socket::SocketType::STREAM, ip_address, port);
             if (m_initialized)
             {
-
                 m_socket.setsockopt();
                 m_socket.bind();
 
                 int res = m_socket.listen(number_of_connections);
 
-                m_socket.add_to_fd_set(&m_master);                
+                FD_SET(m_socket.get_raw_socket(),&m_socket_set);
+                m_socket_list.push_back(m_socket.get_raw_socket());        
             }
         }
     }
@@ -295,13 +309,16 @@ public:
         not_initialized,
         client_connected,
         client_disconnected,
-        incoming_message,    
+        client_error,
+        rx,    
     };
 
     struct Event
     {
-        Event_code event_code;      
-        std::string to_string()
+        Event_code event_code;
+        SOCKET client;
+        int bytes_available;      
+        std::string to_string() const
         {
             std::string s = "0";
             s[0] += int(event_code);
@@ -309,20 +326,89 @@ public:
         }  
     };
 
-    Event wait_for_event()
+    std::vector<Event> wait_for_events()
     {
-        Event event = {Event_code::no_event};
+        std::vector<Event> events;
+        //Event event = {Event_code::no_event};
         if (m_initialized)
         {
-            m_read_fds = m_master;
-            int res = select(1, &m_read_fds, NULL, NULL, NULL);
+            fd_set event_socket_set = m_socket_set;
+            int res = select(m_socket_list.size(), &event_socket_set, NULL, NULL, NULL);
             printf("select res: %d\n",res);
+
+            auto m_socket_list_copy = m_socket_list;
+            for(const auto& raw_socket: m_socket_list_copy)
+            {
+                printf("checking events for: %d\n",raw_socket);
+                if (FD_ISSET(raw_socket, &event_socket_set)) //new event 
+                { 
+                    printf("Event for socket: %d\n",raw_socket);
+
+                    if (raw_socket == m_socket.get_raw_socket()) //server event
+                    {                    
+                        struct sockaddr_storage remoteaddr; // client address
+                        socklen_t addrlen;    
+                        int new_socket = accept(m_socket.get_raw_socket(), (struct sockaddr *)&remoteaddr, &addrlen);
+
+                        printf("server_event: %d\n", new_socket);
+
+                        if (new_socket == -1)
+                        {
+                            printf("accept failed\n");
+                        } 
+                        else {
+                            FD_SET(new_socket, &m_socket_set); // add to master set
+                            m_socket_list.push_back(new_socket);  
+             
+                            char remoteIP[INET6_ADDRSTRLEN];
+                            const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
+
+                            printf("selectserver: new connection from %s on socket %d\n", address, new_socket);
+
+                            Event event = {Event_code::client_connected, raw_socket, 0};
+                            events.push_back(event);
+                        }
+                    }
+                    else //client event
+                    {                        
+                        uint8_t buffer[1024];
+                        int peek = recv(raw_socket, (char*)buffer, sizeof(buffer), MSG_PEEK);
+
+                        if (peek < 0)
+                        {
+                            //error
+
+                            Event event = {Event_code::client_error, raw_socket, 0};
+                            events.push_back(event);
+                            // FD_CLR(raw_socket, &m_socket_set);     
+                            // m_socket_list.remove(raw_socket);    
+                        }
+                        else if (peek == 0)
+                        {
+                            //close
+
+                            Event event = {Event_code::client_disconnected, raw_socket, 0};
+                            events.push_back(event);
+                            FD_CLR(raw_socket, &m_socket_set);     
+                            m_socket_list.remove(raw_socket);                       
+                        }
+                        else
+                        {
+                            //data                            
+                            Event event = {Event_code::rx, raw_socket, peek};
+                            events.push_back(event); 
+                        }
+                    }
+                }
+            }
+
         }
         else{
-            event.event_code = Event_code::not_initialized;
+            Event event= {Event_code::not_initialized};
+            events.push_back(event);
         }
 
-        return event;
+        return events;
     }
 
     private:
@@ -330,7 +416,8 @@ public:
     bool m_initialized;
     Socket m_socket;
 
-    fd_set m_master;    // master file descriptor list
-    fd_set m_read_fds;  // temp file descriptor list for select()
+    fd_set m_socket_set;
+    std::list<SOCKET> m_socket_list;
+      
     int m_fdmax;        // maximum file descriptor number
 };
