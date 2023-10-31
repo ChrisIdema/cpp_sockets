@@ -13,38 +13,37 @@
 
 
 
-struct Server_params
-{
-    std::string server_ip;
-    uint16_t server_port;
-};
+// struct Server_params
+// {
+//     std::string server_ip;
+//     uint16_t server_port;
+// };
 
-static void server_thread(Server_params& params)
-{
-    Server_socket socket;
+// static void server_thread(Server_params& params)
+// {
+//     // Server_socket socket;
 
-    socket.init(Server_socket::SOCK_STREAM, "192.168.1.45", 60000);
+//     // socket.init(Server_socket::SOCK_STREAM, "192.168.1.45", 60000);
 
-}
+// }
 
-struct Client_params
-{
-    std::string server_ip;
-    uint16_t server_port;
+// struct Client_params
+// {
+//     std::string server_ip;
+//     uint16_t server_port;
 
-    int client_id;
+//     int client_id;
 
-    //semaphore
-};
+//     //semaphore
+// };
 
-static void client_thread(Client_params& params)
-{
+// static void client_thread(Client_params& params)
+// {
 
-}
+// }
 
 int main() {
-
-    simple_socket_init();
+    Simple_socket_instance simple;
 
     //create semaphore
     //start server thread
@@ -58,7 +57,14 @@ int main() {
     //server join
     //verify results (passed by pointer/reference)
 
+    Server_socket server;
+    server.init("192.168.1.45", 60000);
 
+    auto event = server.wait_for_event();
+    printf("event: %s\n", event.to_string().c_str());
+
+    event = server.wait_for_event();
+    printf("event: %s\n", event.to_string().c_str());
 
 
     fprintf(stderr, RED "[ERROR]" NC ": test1() failed!\n");
