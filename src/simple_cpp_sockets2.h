@@ -76,7 +76,7 @@ class Simple_socket_instance
 //for wsa_error codes see: https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
 static int ts_bind(SOCKET socket, const struct sockaddr* name, int namelen, int* wsa_error=nullptr)
 {
-    const std::lock_guard<std::mutex> lock(socket_mutex); // needed because WSAGetLastError not thread safe
+    const std::lock_guard<std::mutex> lock(socket_mutex);  // needed because WSAGetLastError might not be thread safe, todo: check
     int res = bind(socket, name, namelen);
 
     if(res == SOCKET_ERROR);
@@ -94,7 +94,7 @@ static int ts_bind(SOCKET socket, const struct sockaddr* name, int namelen, int*
 //for wsa_error codes see: https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
 static int ts_accept(SOCKET socket, struct sockaddr* addr, int* addrlen, int* wsa_error=nullptr)
 {
-    const std::lock_guard<std::mutex> lock(socket_mutex); // needed because WSAGetLastError not thread safe
+    const std::lock_guard<std::mutex> lock(socket_mutex); // needed because WSAGetLastError might not be thread safe, todo: check
 
     int new_socket = accept(socket, addr, addrlen);
 
@@ -127,13 +127,21 @@ public:
     };
 
     Socket(SocketType socket_type=SocketType::UNKNOWN)
-        :
+        : 
+        m_socket(INVALID_SOCKET),
+        m_addr({0}),
+        address_valid(false),
+        initialized(false),
         m_type(socket_type)
     {
     }
 
     Socket(SocketType socket_type, std::string ip_address, uint16_t port)
-        :
+        : 
+        m_socket(INVALID_SOCKET),
+        m_addr({0}),
+        address_valid(false),
+        initialized(false),
         m_type(socket_type)
     {
         int res = inet_pton(AF_INET, ip_address.c_str(), &m_addr.sin_addr);
@@ -158,13 +166,22 @@ public:
 
         if (m_type != SocketType::UNKNOWN && address_valid)
         {
-            m_socket = socket(AF_INET, static_cast<int>(m_type), 0);  
+            int res = socket(AF_INET, static_cast<int>(m_type), 0);  
             //m_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+            if (res == -1)
+            {
+                m_socket = INVALID_SOCKET;
+            }
+            else
+            {
+                m_socket = res;
+            }
 
             printf("m_socket: %d\n",m_socket);
             if (m_socket == INVALID_SOCKET)
             {
                 printf("error\n");
+                printf("WSAGetLastError(): %d\n",WSAGetLastError());
             }
             else
             {
@@ -174,6 +191,10 @@ public:
                 setsockopt();  
             }
         }
+        else
+        {
+           printf("not initialized\n"); 
+        }
 
         return initialized;
     }
@@ -182,6 +203,7 @@ public:
     {
         if (initialized)
         {
+            printf("already initialized!\n");
             return true;
         }
 
@@ -190,6 +212,8 @@ public:
         m_addr.sin_port = htons(port);
         address_valid = true;      
         printf("inet_pton res: %d\n", res);
+
+        printf("WSAGetLastError(): %d\n",WSAGetLastError());
 
         return init();
     }
@@ -205,6 +229,7 @@ public:
                 ::close(m_socket);
             #endif
             initialized = false;
+            m_socket = INVALID_SOCKET;
         }
     }
 
@@ -221,6 +246,7 @@ public:
         #endif
         
         printf("setsockopt res: %d\n",res);
+        printf("WSAGetLastError(): %d\n",WSAGetLastError());
 
         return res;
     }
@@ -230,13 +256,26 @@ public:
         int wsa_error = 0;
         int res = ts_bind(m_socket,(const sockaddr *)&m_addr,sizeof(m_addr), &wsa_error);
         printf("bind res: %d\n",res);
+        printf("WSAGetLastError(): %d\n",WSAGetLastError());
         return res;
     }
 
     int listen(int backlog)
-    {        
-        int res = ::listen(m_socket, backlog);
-        printf("listen res: %d\n",res);
+    {  
+        int res = -1;
+        if (initialized)
+        {
+            res = ::listen(m_socket, backlog);
+            printf("listen res: %d\n",res);
+            printf("listen m_socket: %d\n",m_socket);
+
+            printf("WSAGetLastError(): %d\n",WSAGetLastError());
+        }
+        else
+        {
+            printf("not initialized\n");
+        }
+
         return res;
     }
 
@@ -284,7 +323,10 @@ class Server_socket
 {
 public:
     Server_socket()
-        : m_initialized(false)
+        : 
+        m_initialized(false),
+        m_socket(Socket())
+
     {
         FD_ZERO(&m_socket_set); // clear set
     }
@@ -300,6 +342,7 @@ public:
     {
         if(!m_initialized)
         {        
+            printf("calling m_socket.init\n");
             m_initialized = m_socket.init(Socket::SocketType::STREAM, ip_address, port);
             if (m_initialized)
             {    
@@ -343,6 +386,8 @@ public:
             fd_set event_socket_set = m_socket_set;
             int res = select(m_socket_list.size(), &event_socket_set, NULL, NULL, NULL);
             printf("select res: %d\n",res);
+            printf("WSAGetLastError(): %d\n",WSAGetLastError());
+
 
             auto m_socket_list_copy = m_socket_list;
             for(const auto& raw_socket: m_socket_list_copy)
@@ -358,16 +403,17 @@ public:
                         //struct sockaddr_in remoteaddr; // client address                        
                         socklen_t addrlen = sizeof(remoteaddr);    
                         int wsa_error = 0;
-                        int new_socket = ts_accept(m_socket.get_raw_socket(), (struct sockaddr *)&remoteaddr, &addrlen, &wsa_error);
+                        int res = ts_accept(m_socket.get_raw_socket(), (struct sockaddr *)&remoteaddr, &addrlen, &wsa_error);
 
                         printf("server_event\n");
 
-                        if (new_socket == -1)
+                        if (res == -1)
                         {
                             printf("accept failed: %d\n", wsa_error);
                         } 
                         else 
                         {
+                            SOCKET new_socket = res; 
                             FD_SET(new_socket, &m_socket_set); // add to master set
                             m_socket_list.push_back(new_socket);  
              
