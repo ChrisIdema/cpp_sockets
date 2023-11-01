@@ -18,6 +18,7 @@ jobs:
         run: cl main.cpp simple_cpp_sockets.cpp
         working-directory: ./src
   test-windows:
+    needs: build-windows
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +34,7 @@ jobs:
         run: g++ main.cpp -o main
         working-directory: ./src
   test-linux:
+    needs: build-linux
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
