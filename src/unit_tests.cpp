@@ -29,8 +29,6 @@ static void server_thread(Server_params* params)
 {
     Server_socket server;
     server.init(params->server_ip, params->server_port);
-    //printf("initializing server...\n");
-    //server.init("192.168.1.45", 60000);
 
     int state = 0;
     SOCKET client_socket = INVALID_SOCKET;
@@ -86,7 +84,7 @@ static void server_thread(Server_params* params)
     params->valid = state == 3;
 
     // Server_socket server;
-    // server.init("192.168.1.45", 60000);
+    // server.init("", 60000);
 
     // for(int i=0;i<4;++i)
     // {
@@ -224,9 +222,12 @@ static void client_thread(Client_params* params)
 
 int test1()
 {
+    // Server_params server_params={"0.0.0.0", 60000, false};
+    // Server_params server_params={"", 60000, false};
+    Server_params server_params={"127.0.0.1", 60000, false};
 
-    Server_params server_params={"192.168.1.45", 60000, false};
-    Client_params client_params={"192.168.1.45", 60000, 1, false};
+    // Client_params client_params={"", 60000, 1, false};
+    Client_params client_params={"127.0.0.1", 60000, 1, false};
 
     std::thread server_thread(server_thread, &server_params); 
     std::thread client_thread(client_thread, &client_params); 
@@ -250,6 +251,27 @@ int test1()
     return -1;
 }
 
+// char *get_ip_str(const struct sockaddr *sa, char *s, size_t maxlen)
+// {
+//     switch(sa->sa_family) {
+//         case AF_INET:
+//             inet_ntop(AF_INET, &(((struct sockaddr_in *)sa)->sin_addr),
+//                     s, maxlen);
+//             break;
+
+//         case AF_INET6:
+//             inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)sa)->sin6_addr),
+//                     s, maxlen);
+//             break;
+
+//         default:
+//             strncpy(s, "Unknown AF", maxlen);
+//             return NULL;
+//     }
+
+//     return s;
+// }
+
 int main() {
     Simple_socket_instance simple;
 
@@ -265,33 +287,6 @@ int main() {
     // server join
     // verify results (passed by pointer/reference)
 
-    // Server_socket server;
-    // server.init("192.168.1.45", 60000);
-
-    // for(int i=0;i<4;++i)
-    // {
-    //     auto events = server.wait_for_events();
-    //     for(const auto& event: events)
-    //     {
-    //         printf("event: %s\n", event.to_string().c_str());
-    //         if (event.event_code == Server_socket::Event_code::rx)
-    //         {
-    //             char buffer[100+1] = "";
-    //             recv(event.client,buffer, sizeof(buffer)-1,0);
-    //             send(event.client, "Hi\n", 3, 0); // response
-    //             printf("received: %s\n", buffer);
-                
-    //         }
-    //     }
-    // }
-
-    // // send to all clients:
-    // auto connected_clients = server.get_client_list();
-    // for(const auto& client: connected_clients)
-    // {
-    //     send(client, "bye\n", 4, 0); 
-    // }
-
     int res = test1();
 
     if (res != 0)
@@ -304,7 +299,26 @@ int main() {
         printf(GREEN "[SUCCESS]" NC ": test1() succeeded!\n");
     }
 
-    
+
+    // struct addrinfo hints, *res;
+    // // first, load up address structs with getaddrinfo():
+    // memset(&hints, 0, sizeof hints);
+    // hints.ai_family = AF_UNSPEC;  // use IPv4 or IPv6, whichever
+    // hints.ai_socktype = SOCK_STREAM;
+    // hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
+
+    // uint16_t port = 60000;
+    // getaddrinfo(NULL, std::to_string(port).c_str(), &hints, &res);
+
+    // for(struct addrinfo* r=res; r!=nullptr; r=r->ai_next)
+    // {
+    //     struct sockaddr ai_addr = *r->ai_addr;
+    //     size_t ai_addrlen = r->ai_addrlen;
+
+    //     char ip_string[100]="";
+    //     get_ip_str(&ai_addr, ip_string, ai_addrlen);
+    //     printf("my ip: %s\n", ip_string);
+    // }
 
     return 0; 
 }
