@@ -274,12 +274,15 @@ public:
     int setsockopt()
     {
         #ifdef WIN32
-        BOOL bOptVal = FALSE;
-        int bOptLen = sizeof (BOOL);
-        int res = ::setsockopt(m_socket, SOL_SOCKET, SO_KEEPALIVE, (char *)&bOptVal, sizeof(bOptLen));
+        BOOL yes = FALSE;
+        int res;
+        res = ::setsockopt(m_socket, SOL_SOCKET, SO_KEEPALIVE, (char *)&yes, sizeof(yes));
+        res = ::setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(yes));
         #else
         const int yes=1;        // for setsockopt() SO_REUSEADDR, below
-        int res = ::setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+        int res;
+        res = ::setsockopt(m_socket, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
+        res = ::setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
         #endif
         
         printf("setsockopt res: %d\n",res);
