@@ -14,7 +14,7 @@
 
 //#include <windows.h>
 #include <chrono>
-
+using namespace std::chrono_literals;
 
 
 
@@ -63,6 +63,7 @@ static void server_thread_function(Server_params* params)
                             {
                                 state = 2;
                                 send(event.client, "2", 1, 0); // response
+                                std::this_thread::sleep_for(1000ms);//wait for tx to complete
                             }
                         }
                     }
@@ -155,7 +156,7 @@ static void client_thread_function(Client_params* params)
 
     //wait for server to connect
     //Sleep(1000);
-    using namespace std::chrono_literals;
+
     std::this_thread::sleep_for(1000ms);
 
     printf("client thread started\n");

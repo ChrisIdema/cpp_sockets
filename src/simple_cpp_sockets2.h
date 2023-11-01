@@ -363,7 +363,9 @@ public:
         : 
         m_initialized(false),
         m_socket(Socket())
-
+        #ifndef _WIN32
+        ,m_largest_fd(-1)
+        #endif
     {
         FD_ZERO(&m_socket_set); // clear set
     }
@@ -386,7 +388,10 @@ public:
                 int res = m_socket.listen(number_of_connections);
 
                 FD_SET(m_socket.get_raw_socket(),&m_socket_set);
-                m_socket_list.push_back(m_socket.get_raw_socket());    
+                m_socket_list.push_back(m_socket.get_raw_socket());   
+                #ifndef _WIN32
+                m_largest_fd = m_socket.get_raw_socket();
+                #endif
             }
         }
     }
@@ -421,7 +426,13 @@ public:
         if (m_initialized)
         {
             fd_set event_socket_set = m_socket_set;
-            int res = select(m_socket_list.size(), &event_socket_set, NULL, NULL, NULL);
+
+            #if defined(_WIN32)
+                int res = select(0, &event_socket_set, NULL, NULL, NULL);
+            #else
+                int res = select(m_largest_fd+1, &event_socket_set, NULL, NULL, NULL);
+            #endif
+
             printf("select res: %d\n",res);
             //printf("WSAGetLastError(): %d\n",WSAGetLastError());
 
@@ -453,6 +464,13 @@ public:
                             SOCKET new_socket = res; 
                             FD_SET(new_socket, &m_socket_set); // add to master set
                             m_socket_list.push_back(new_socket);  
+
+                            #ifndef _WIN32
+                                if (new_socket > m_largest_fd)
+                                {
+                                    m_largest_fd = new_socket;
+                                }                            
+                            #endif
              
                             char remoteIP[INET6_ADDRSTRLEN];
                             const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
@@ -485,7 +503,22 @@ public:
                             Event event = {Event_code::client_disconnected, raw_socket, 0};
                             events.push_back(event);
                             FD_CLR(raw_socket, &m_socket_set);     
-                            m_socket_list.remove(raw_socket);                       
+                            m_socket_list.remove(raw_socket);  
+
+                            #ifndef _WIN32
+                                //if largest has been removed a new one needs to be calculated
+                                if (raw_socket == m_largest_fd) 
+                                {
+                                    m_largest_fd = -1;
+                                    for(const auto& fd: m_socket_list)
+                                    {
+                                        if(fd > m_largest_fd)
+                                        {
+                                            m_largest_fd = fd;
+                                        }
+                                    }
+                                }                            
+                            #endif                     
                         }
                         else
                         {
@@ -520,6 +553,7 @@ public:
 
     fd_set m_socket_set;
     std::list<SOCKET> m_socket_list;
-      
-    int m_fdmax;        // maximum file descriptor number
+    #ifndef _WIN32
+    int m_largest_fd;
+    #endif
 };
