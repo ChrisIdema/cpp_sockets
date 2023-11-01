@@ -40,6 +40,9 @@ jobs:
       - uses: actions/checkout@v4
       - name: explore
         run: ls
+      - name: explore2
+        run: ls
+        working-directory: ./src
       - name: test on Linux
         run: ./main
         working-directory: ./src
