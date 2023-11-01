@@ -38,6 +38,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: explore
+        run: ls
       - name: test on Linux
         run: ./main
         working-directory: ./src
