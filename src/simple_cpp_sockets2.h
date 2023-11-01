@@ -1,5 +1,3 @@
-#include <string>
-
 // Windows
 #if defined(_WIN32)
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
@@ -15,6 +13,8 @@ typedef SSIZE_T ssize_t;
 // Linux
 #else
 #include <sys/socket.h>
+//#include <sys/types.h>
+#include <netdb.h>
 #include <arpa/inet.h> // This contains inet_addr
 #include <unistd.h> // This contains close
 #define INVALID_SOCKET (SOCKET)(~0)
@@ -22,6 +22,7 @@ typedef SSIZE_T ssize_t;
 typedef int SOCKET;
 #endif
 
+#include <string>
 #include <vector>
 #include <list>
 
@@ -55,9 +56,9 @@ static void simple_socket_deinit()
 class Simple_socket_instance
 {
     public:
-    Simple_socket_instance(int* wsa_error=nullptr)
+    Simple_socket_instance(int* error=nullptr)
     {
-        initialized = simple_socket_init(wsa_error) == 0;
+        initialized = simple_socket_init(error) == 0;
     }
 
     ~Simple_socket_instance()
@@ -92,11 +93,11 @@ static int ts_bind(SOCKET socket, const struct sockaddr* name, int namelen, int*
 
 //thread safe accept function
 //for wsa_error codes see: https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
-static int ts_accept(SOCKET socket, struct sockaddr* addr, int* addrlen, int* wsa_error=nullptr)
+static SOCKET ts_accept(SOCKET socket, struct sockaddr* addr, int* addrlen, int* wsa_error=nullptr)
 {
     const std::lock_guard<std::mutex> lock(socket_mutex); // needed because WSAGetLastError might not be thread safe, todo: check
 
-    int new_socket = accept(socket, addr, addrlen);
+    SOCKET new_socket = accept(socket, addr, addrlen);
 
     if (new_socket == INVALID_SOCKET)
     {
@@ -112,8 +113,44 @@ static int ts_accept(SOCKET socket, struct sockaddr* addr, int* addrlen, int* ws
 #else
     #define simple_socket_init() (void)
     #define simple_socket_deinit() (void)
-    #define ts_bind bind
-    #define ts_accept accept
+
+    typedef int Simple_socket_instance;
+
+
+static int ts_bind(SOCKET socket, const struct sockaddr* name, int namelen, int* error=nullptr)
+{
+    //const std::lock_guard<std::mutex> lock(socket_mutex);  // needed because WSAGetLastError might not be thread safe, todo: check
+    int res = bind(socket, name, namelen);
+
+    if(res == SOCKET_ERROR);
+    {
+        if (error != nullptr)
+        {
+            //*error = errno();
+        }
+    }
+
+    return res;
+}
+
+//thread safe accept function
+//for wsa_error codes see: https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2
+static SOCKET ts_accept(SOCKET socket, struct sockaddr* addr, socklen_t* addrlen, int* error=nullptr)
+{
+    //const std::lock_guard<std::mutex> lock(socket_mutex); // needed because WSAGetLastError might not be thread safe, todo: check
+
+    SOCKET new_socket = accept(socket, addr, addrlen);
+
+    if (new_socket == INVALID_SOCKET)
+    {
+        if (error != nullptr)
+        {
+            //*error = errno();
+        }        
+    }
+
+    return new_socket;
+}
 #endif
 
 
@@ -181,7 +218,7 @@ public:
             if (m_socket == INVALID_SOCKET)
             {
                 printf("error\n");
-                printf("WSAGetLastError(): %d\n",WSAGetLastError());
+                //printf("WSAGetLastError(): %d\n",WSAGetLastError());
             }
             else
             {
@@ -213,7 +250,7 @@ public:
         address_valid = true;      
         printf("inet_pton res: %d\n", res);
 
-        printf("WSAGetLastError(): %d\n",WSAGetLastError());
+        //printf("WSAGetLastError(): %d\n",WSAGetLastError());
 
         return init();
     }
@@ -246,7 +283,7 @@ public:
         #endif
         
         printf("setsockopt res: %d\n",res);
-        printf("WSAGetLastError(): %d\n",WSAGetLastError());
+        //printf("WSAGetLastError(): %d\n",WSAGetLastError());
 
         return res;
     }
@@ -256,7 +293,7 @@ public:
         int wsa_error = 0;
         int res = ts_bind(m_socket,(const sockaddr *)&m_addr,sizeof(m_addr), &wsa_error);
         printf("bind res: %d\n",res);
-        printf("WSAGetLastError(): %d\n",WSAGetLastError());
+        //printf("WSAGetLastError(): %d\n",WSAGetLastError());
         return res;
     }
 
@@ -269,7 +306,7 @@ public:
             printf("listen res: %d\n",res);
             printf("listen m_socket: %d\n",m_socket);
 
-            printf("WSAGetLastError(): %d\n",WSAGetLastError());
+            //printf("WSAGetLastError(): %d\n",WSAGetLastError());
         }
         else
         {
@@ -308,7 +345,7 @@ static void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-static USHORT get_in_port(struct sockaddr *sa)
+static uint16_t get_in_port(struct sockaddr *sa)
 {
     if (sa->sa_family == AF_INET)
     {
@@ -386,7 +423,7 @@ public:
             fd_set event_socket_set = m_socket_set;
             int res = select(m_socket_list.size(), &event_socket_set, NULL, NULL, NULL);
             printf("select res: %d\n",res);
-            printf("WSAGetLastError(): %d\n",WSAGetLastError());
+            //printf("WSAGetLastError(): %d\n",WSAGetLastError());
 
 
             auto m_socket_list_copy = m_socket_list;
@@ -419,7 +456,7 @@ public:
              
                             char remoteIP[INET6_ADDRSTRLEN];
                             const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
-                            int port = ntohs(get_in_port((struct sockaddr*)&remoteaddr));
+                            uint16_t port = ntohs(get_in_port((struct sockaddr*)&remoteaddr));
 
                             printf("selectserver: new connection from %s:%d on socket %d\n", address,port, new_socket);
 

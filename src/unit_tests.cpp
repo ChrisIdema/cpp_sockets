@@ -4,16 +4,16 @@
 #include <thread> 
 #include <string>
 
-
 #include <cstdio>
+#include <cstring>
 #include <cstdint>
 
 #define RED   "\033[0;31m"
 #define GREEN "\033[0;32m"
 #define NC    "\033[0m"
 
-#include <windows.h>
-
+//#include <windows.h>
+#include <chrono>
 
 
 
@@ -25,7 +25,7 @@ struct Server_params
     bool valid;
 };
 
-static void server_thread(Server_params* params)
+static void server_thread_function(Server_params* params)
 {
     Server_socket server;
     server.init(params->server_ip, params->server_port);
@@ -125,7 +125,7 @@ struct Client_params
     //semaphore
 };
 
-static void client_thread(Client_params* params)
+static void client_thread_function(Client_params* params)
 {
 
     // sockaddr_in server_addr;
@@ -147,11 +147,17 @@ static void client_thread(Client_params* params)
 
     int sockfd, numbytes;  
     char buf[10]="";
-    struct addrinfo hints, *servinfo, *p;
+    struct addrinfo hints;
+    struct addrinfo *servinfo;
+    struct addrinfo *p;
     int rv;
     char s[INET6_ADDRSTRLEN];
 
-    Sleep(1000);//wait for server to connect
+    //wait for server to connect
+    //Sleep(1000);
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(1000ms);
+
     printf("client thread started\n");
 
 
@@ -173,7 +179,11 @@ static void client_thread(Client_params* params)
         }
 
         if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-            closesocket(sockfd);
+            #ifdef WIN32
+                closesocket(sockfd);
+            #else
+                close(sockfd);
+            #endif
             perror("client: connect");
             continue;
         }
@@ -192,7 +202,10 @@ static void client_thread(Client_params* params)
     freeaddrinfo(servinfo); // all done with this structure
 
     send(sockfd, "1", 1, 0);
-    Sleep(1000);//give server chance to respond
+    //give server chance to respond
+    //Sleep(1000);
+    using namespace std::chrono_literals;
+    std::this_thread::sleep_for(1000ms);
 
     if ((numbytes = recv(sockfd, buf, sizeof(buf)-1, 0)) == -1) {
         perror("recv");
@@ -209,15 +222,29 @@ static void client_thread(Client_params* params)
     else
     {
         printf("client: received '%s'\n",buf);  
-        closesocket(sockfd);
+        #ifdef WIN32
+            closesocket(sockfd);
+        #else
+            close(sockfd);
+        #endif
         return;
     }   
     
 
-    closesocket(sockfd);
+    #ifdef WIN32
+        closesocket(sockfd);
+    #else
+        close(sockfd);
+    #endif
 
     //params->valid = true;
   
+}
+
+
+static void foo(Server_params* params)
+{
+    printf("Hello %s!\n",params->server_ip.c_str());
 }
 
 int test1()
@@ -229,8 +256,9 @@ int test1()
     // Client_params client_params={"", 60000, 1, false};
     Client_params client_params={"127.0.0.1", 60000, 1, false};
 
-    std::thread server_thread(server_thread, &server_params); 
-    std::thread client_thread(client_thread, &client_params); 
+
+    std::thread server_thread(server_thread_function, &server_params); 
+    std::thread client_thread(client_thread_function, &client_params); 
 
     server_thread.join();
     client_thread.join();
