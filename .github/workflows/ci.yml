@@ -26,6 +26,17 @@ jobs:
       - name: test on Windows
         run: main.exe
         working-directory: ./src     
+  build-and-testwindows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build on Windows
+        run: cl main.cpp simple_cpp_sockets.cpp
+        working-directory: ./src
+      - name: test on Windows
+        run: main.exe
+        working-directory: ./src     
   build-linux:
     runs-on: ubuntu-latest
     steps:
