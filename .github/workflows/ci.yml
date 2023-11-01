@@ -1,4 +1,4 @@
-name: Build
+name: Build and test on windows and Linux
 on:
   push:
     branches:
