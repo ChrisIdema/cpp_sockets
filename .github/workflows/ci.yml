@@ -9,24 +9,7 @@ on:
       - master
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ilammy/msvc-dev-cmd@v1
-      - name: Build on Windows
-        run: cl main.cpp simple_cpp_sockets.cpp
-        working-directory: ./src
-  test-windows:
-    needs: build-windows
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: ilammy/msvc-dev-cmd@v1
-      - name: test on Windows
-        run: ./main.exe
-        working-directory: ./src     
-  build-and-testwindows:
+  build-and-test-windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
@@ -37,23 +20,14 @@ jobs:
       - name: test on Windows
         run: ./main.exe
         working-directory: ./src     
-  build-linux:
+  build-and-test-linux:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Build on Linux
         run: g++ main.cpp -o main
         working-directory: ./src
-  test-linux:
-    needs: build-linux
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: explore
-        run: ls
-      - name: explore2
-        run: ls
-        working-directory: ./src
       - name: test on Linux
         run: ./main
         working-directory: ./src
+
