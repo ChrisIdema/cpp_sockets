@@ -302,7 +302,7 @@ int test1()
 // }
 
 int main() {
-    Simple_socket_instance simple;
+    Simple_socket_library simple;
 
     // create semaphore
     // start server thread
@@ -315,6 +315,10 @@ int main() {
     // close server
     // server join
     // verify results (passed by pointer/reference)
+
+    print_socket(0);
+    print_socket(1);
+    print_socket(INVALID_SOCKET);
 
     int res = test1();
 

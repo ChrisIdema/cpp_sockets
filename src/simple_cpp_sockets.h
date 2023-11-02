@@ -53,24 +53,24 @@ static void simple_socket_deinit()
 }
 
 //RAII wrapper for simple_socket_init/simple_socket_deinit
-class Simple_socket_instance
+class Simple_socket_library
 {
     public:
-    Simple_socket_instance(int* error=nullptr)
+    Simple_socket_library(int* error=nullptr)
     {
-        initialized = simple_socket_init(error) == 0;
+        m_initialized = simple_socket_init(error) == 0;
     }
 
-    ~Simple_socket_instance()
+    ~Simple_socket_library()
     {
-        if (initialized)
+        if (m_initialized)
         {
             simple_socket_deinit();
         }
     }
 
     private:
-    bool initialized;
+    bool m_initialized;
 };
 
 //thread safe bind function
@@ -110,12 +110,16 @@ static SOCKET ts_accept(SOCKET socket, struct sockaddr* addr, int* addrlen, int*
     return new_socket;
 }
 
+#define SOCKET_FORMAT_STRING "%u"
+
 #else
-    #define simple_socket_init() (void)
-    #define simple_socket_deinit() (void)
 
-    typedef int Simple_socket_instance;
+#define simple_socket_init() (void)
+#define simple_socket_deinit() (void)
 
+typedef int Simple_socket_library;
+
+#define SOCKET_FORMAT_STRING "%d"
 
 static int ts_bind(SOCKET socket, const struct sockaddr* name, int namelen, int* error=nullptr)
 {
@@ -153,42 +157,54 @@ static SOCKET ts_accept(SOCKET socket, struct sockaddr* addr, socklen_t* addrlen
 }
 #endif
 
+static inline void print_socket(SOCKET s)
+{
+    if (s==INVALID_SOCKET)
+    {
+        printf("INVALID_SOCKET\n",s);
+    }
+    else
+    {
+        printf(SOCKET_FORMAT_STRING"\n",s);
+    }
+}
 
 
-class Socket {
+
+class Simple_socket {
 public:
-    enum class SocketType {
+    enum class Simple_socketType {
         UNKNOWN,
         STREAM = SOCK_STREAM,
         DGRAM = SOCK_DGRAM        
     };
 
-    Socket(SocketType socket_type=SocketType::UNKNOWN)
+    Simple_socket(Simple_socketType socket_type=Simple_socketType::UNKNOWN)
         : 
         m_socket(INVALID_SOCKET),
         m_addr({0}),
-        address_valid(false),
-        initialized(false),
+        m_address_valid(false),
+        m_initialized(false),
         m_type(socket_type)
     {
     }
 
-    Socket(SocketType socket_type, std::string ip_address, uint16_t port)
+    Simple_socket(Simple_socketType socket_type, std::string ip_address, uint16_t port)
         : 
         m_socket(INVALID_SOCKET),
         m_addr({0}),
-        address_valid(false),
-        initialized(false),
+        m_address_valid(false),
+        m_initialized(false),
         m_type(socket_type)
     {
         int res = inet_pton(AF_INET, ip_address.c_str(), &m_addr.sin_addr);
         m_addr.sin_port = htons(port);
-        address_valid = true; 
+        m_address_valid = res != INVALID_SOCKET; 
         printf("inet_pton res: %d\n",res);  
     }
 
 
-    ~Socket()
+    ~Simple_socket()
     {
         close();
     }
@@ -196,25 +212,27 @@ public:
 
     bool init(void)
     {
-        if (initialized)
+        if (m_initialized)
         {
             return true;
         }
 
-        if (m_type != SocketType::UNKNOWN && address_valid)
+        if (m_type != Simple_socketType::UNKNOWN && m_address_valid)
         {
-            int res = socket(AF_INET, static_cast<int>(m_type), 0);  
+            SOCKET socket = ::socket(AF_INET, static_cast<int>(m_type), 0);  
             //m_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-            if (res == -1)
+            if (socket == INVALID_SOCKET)
             {
                 m_socket = INVALID_SOCKET;
             }
             else
             {
-                m_socket = res;
+                m_socket = socket;
             }
 
-            printf("m_socket: %d\n",m_socket);
+            printf("m_socket: ");
+            print_socket(m_socket);
+
             if (m_socket == INVALID_SOCKET)
             {
                 printf("error\n");
@@ -222,10 +240,11 @@ public:
             }
             else
             {
-                initialized = true;
+                m_initialized = true;
                 m_addr.sin_family = AF_INET;
-                bind();
-                setsockopt();  
+                int res = bind();
+                res = set_options();  
+                //todo process errors
             }
         }
         else
@@ -233,12 +252,12 @@ public:
            printf("not initialized\n"); 
         }
 
-        return initialized;
+        return m_initialized;
     }
 
-    bool init(SocketType socket_type, std::string ip_address, uint16_t port)
+    bool init(Simple_socketType socket_type, std::string ip_address, uint16_t port)
     {
-        if (initialized)
+        if (m_initialized)
         {
             printf("already initialized!\n");
             return true;
@@ -247,7 +266,7 @@ public:
         m_type = socket_type;
         int res = inet_pton(AF_INET, ip_address.c_str(), &m_addr.sin_addr);
         m_addr.sin_port = htons(port);
-        address_valid = true;      
+        m_address_valid = res != SOCKET_ERROR;      
         printf("inet_pton res: %d\n", res);
 
         //printf("WSAGetLastError(): %d\n",WSAGetLastError());
@@ -258,34 +277,44 @@ public:
 
     void close()
     {
-        if (initialized)
+        if (m_initialized)
         {
             #ifdef WIN32
-                ::closesocket(m_socket);
+                ::closesocket(m_initialized);
             #else
                 ::close(m_socket);
             #endif
-            initialized = false;
+            m_initialized = false;
             m_socket = INVALID_SOCKET;
         }
     }
 
     //todo add params
-    int setsockopt()
+
+    int setsockop_bool(int optname, bool value)
     {
+        int res;
         #ifdef WIN32
-        BOOL yes = FALSE;
-        int res;
-        res = ::setsockopt(m_socket, SOL_SOCKET, SO_KEEPALIVE, (char *)&yes, sizeof(yes));
-        res = ::setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(yes));
+        //https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-setsockopt
+        const BOOL converted_param = value;        
+        res = ::setsockopt(m_socket, SOL_SOCKET, optname, (char *)&converted_param, sizeof(converted_param));
         #else
-        const int yes=1;        // for setsockopt() SO_REUSEADDR, below
-        int res;
-        res = ::setsockopt(m_socket, SOL_SOCKET, SO_KEEPALIVE, &yes, sizeof(yes));
-        res = ::setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+        const int converted_param = value;
+        res = ::setsockopt(m_socket, SOL_SOCKET, optname, &converted_param, sizeof(converted_param));
         #endif
-        
-        printf("setsockopt res: %d\n",res);
+        return res;
+    }
+
+    int set_options()
+    {
+        int res;
+        res = setsockop_bool(SO_KEEPALIVE, true);
+        if (res != SOCKET_ERROR)
+        {
+            res = setsockop_bool(SO_REUSEADDR, true);
+        }
+
+        printf("setsockopt res: %d\n", res);
         //printf("WSAGetLastError(): %d\n",WSAGetLastError());
 
         return res;
@@ -303,11 +332,12 @@ public:
     int listen(int backlog)
     {  
         int res = -1;
-        if (initialized)
+        if (m_initialized)
         {
             res = ::listen(m_socket, backlog);
             printf("listen res: %d\n",res);
-            printf("listen m_socket: %d\n",m_socket);
+            printf("listen m_socket: ");
+            print_socket(m_socket);
 
             //printf("WSAGetLastError(): %d\n",WSAGetLastError());
         }
@@ -330,9 +360,9 @@ private:
 
     SOCKET m_socket;
     sockaddr_in m_addr;
-    bool address_valid;
-    bool initialized;
-    SocketType m_type;
+    bool m_address_valid;
+    bool m_initialized;
+    Simple_socketType m_type;
     void set_port(u_short port);
     int set_address(const std::string& ip_address);
 };
@@ -365,7 +395,7 @@ public:
     Server_socket()
         : 
         m_initialized(false),
-        m_socket(Socket())
+        m_socket(Simple_socket())
         #ifndef _WIN32
         ,m_largest_fd(-1)
         #endif
@@ -385,7 +415,7 @@ public:
         if(!m_initialized)
         {        
             printf("calling m_socket.init\n");
-            m_initialized = m_socket.init(Socket::SocketType::STREAM, ip_address, port);
+            m_initialized = m_socket.init(Simple_socket::Simple_socketType::STREAM, ip_address, port);
             if (m_initialized)
             {    
                 int res = m_socket.listen(number_of_connections);
@@ -443,10 +473,13 @@ public:
             auto m_socket_list_copy = m_socket_list;
             for(const auto& raw_socket: m_socket_list_copy)
             {
-                printf("checking events for: %d\n",raw_socket);
+                printf("checking events for: ");
+                print_socket(raw_socket);
+                
                 if (FD_ISSET(raw_socket, &event_socket_set)) //new event 
                 { 
-                    printf("Event for socket: %d\n",raw_socket);
+                    printf("Event for socket: ");
+                    print_socket(raw_socket);
 
                     if (raw_socket == m_socket.get_raw_socket()) //server event
                     {                    
@@ -454,11 +487,11 @@ public:
                         //struct sockaddr_in remoteaddr; // client address                        
                         socklen_t addrlen = sizeof(remoteaddr);    
                         int wsa_error = 0;
-                        int res = ts_accept(m_socket.get_raw_socket(), (struct sockaddr *)&remoteaddr, &addrlen, &wsa_error);
+                        SOCKET res = ts_accept(m_socket.get_raw_socket(), (struct sockaddr *)&remoteaddr, &addrlen, &wsa_error);
 
                         printf("server_event\n");
 
-                        if (res == -1)
+                        if (res == INVALID_SOCKET)
                         {
                             printf("accept failed: %d\n", wsa_error);
                         } 
@@ -479,7 +512,8 @@ public:
                             const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
                             uint16_t port = ntohs(get_in_port((struct sockaddr*)&remoteaddr));
 
-                            printf("selectserver: new connection from %s:%d on socket %d\n", address,port, new_socket);
+                            printf("selectserver: new connection from %s:%u on socket ", address, port);
+                            print_socket(new_socket);
 
                             Event event = {Event_code::client_connected, raw_socket, 0};
                             events.push_back(event);
@@ -552,7 +586,7 @@ public:
     private:
 
     bool m_initialized;
-    Socket m_socket;
+    Simple_socket m_socket;
 
     fd_set m_socket_set;
     std::list<SOCKET> m_socket_list;
