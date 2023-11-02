@@ -1,24 +1,20 @@
 # Simple C++ Sockets
 [![build](https://github.com/ChrisIdema/cpp_sockets/actions/workflows/ci.yml/badge.svg?branch=non_blocking)](https://github.com/ChrisIdema/cpp_sockets/actions/workflows/ci.yml)
 
-*A header-only implementation of TCP and UDP sockets in C++*
+
+Simple library for TCP sockets in C++. Server uses select to receive events (such as connect, disconnect and receive)
 
 ## Description
-This is a very simple header-only library to use network sockets in C++.
 
-There is also a simple application to demonstrate its functionality.
-
-It uses classes, inheritance and other modern C++ features.
-
-Really this library is not that big of a deal and most sources suggest using a library like Boost because of the error-prone nature of programming sockets. 
+Originally forked from https://github.com/computersarecool/cpp_sockets 
+I reimplemented the library to be event-based using select(). This allows the server thread to simply wait for events instead of polling or blocking on certain calls. I removed UDP. 
+It's currently no longer header-only for Windows.
 
 ## Tested On
 - Linux
 - Windows
 
-## To Build
-- The library `simple_cpp_sockets.h` is header-only (just include it in your project).
-
+## Build
 - To build and run the test application on Linux open a terminal and run:
     - `cd src`
     - `g++ main.cpp -o main`
@@ -26,49 +22,19 @@ Really this library is not that big of a deal and most sources suggest using a l
 
 - To build and run the test application on Windows either use Visual Studio directly or open the `Developer Command Prompt` and run:
     - `cd src`
-    - `cl main.cpp`
+    - `cl main.cpp simple_cpp_sockets.cpp`
     - `start main.exe`
 
-## Functionality
-`main.cpp` is a simple functioning example (not all errors are handled gracefully). 
-
-The compiled test application is a CLI that allows you to interactively create a:
-
-- UDP or TCP
-- server or client
-
-By asking for:
-- protocol
-- client or server
-
-If client:
-- destination IP address
-- destination port
-
-If server:
-- port on which to listen
-
-
-
-## To Use
-`simple_cpp_sockets.h` contains classes for UDP and TCP servers and clients.
-
-An example looks like:
-```
-UDPServer server(socket_port);
-int bind_status = server.socket_bind();
-```
-Look at `main.cpp` for the a complete example.
 
 ## Project Structure
 - `src/simple_cpp_sockets.h` is the library
-- `src/main.cpp` is a demo application
+- `src/simple_cpp_sockets.cpp` is needed for Windows
+- `src/main.cpp` is a demo application/unit test
 
-## Extra Notes
-- There is [a lot more that could be done](https://beej.us/guide/bgnet/) but this is outside the goals of this project
+## Links
+- [Popular tutorial on sockets](https://beej.us/guide/bgnet/) 
+- [list of WSA error codes (Windows only)](https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2)
 	
 ### License
-
-:copyright: Willy Nolan 2017
 
 [MIT License](http://en.wikipedia.org/wiki/MIT_License)
