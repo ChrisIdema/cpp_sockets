@@ -1,4 +1,6 @@
 # Simple C++ Sockets
+[![build](https://github.com/ChrisIdema/cpp_sockets/actions/workflows/ci.yml/badge.svg?branch=non_blocking)](https://github.com/ChrisIdema/cpp_sockets/actions/workflows/ci.yml)
+
 *A header-only implementation of TCP and UDP sockets in C++*
 
 ## Description

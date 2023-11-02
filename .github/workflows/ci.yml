@@ -1,26 +1,33 @@
-name: Build
+name: Build and test on windows and Linux
 on:
   push:
     branches:
       - master
+      - develop
   pull_request:
     branches:
       - master
 
 jobs:
-  build-windows:
+  build-and-test-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Build on Windows
-        run: cl main.cpp
+        run: cl main.cpp simple_cpp_sockets.cpp
         working-directory: ./src
-
-  build-linux:
+      - name: test on Windows
+        run: ./main.exe
+        working-directory: ./src     
+  build-and-test-linux:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Build on Linux
         run: g++ main.cpp -o main
         working-directory: ./src
+      - name: test on Linux
+        run: ./main
+        working-directory: ./src
+
