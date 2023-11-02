@@ -22,7 +22,7 @@ It's currently no longer header-only for Windows.
 
 - To build and run the test application on Windows either use Visual Studio directly or open the `Developer Command Prompt` and run:
     - `cd src`
-    - `cl main.cpp simple_cpp_sockets.cpp`
+    - `cl main.cpp simple_cpp_sockets.cpp /EHsc`
     - `start main.exe`
 
 
