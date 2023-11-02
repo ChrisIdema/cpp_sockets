@@ -110,7 +110,12 @@ static SOCKET ts_accept(SOCKET socket, struct sockaddr* addr, int* addrlen, int*
     return new_socket;
 }
 
+
+#ifdef _WIN64
+#define SOCKET_FORMAT_STRING "%llu"
+#else
 #define SOCKET_FORMAT_STRING "%u"
+#endif
 
 #else
 
@@ -161,7 +166,7 @@ static inline void print_socket(SOCKET s)
 {
     if (s==INVALID_SOCKET)
     {
-        printf("INVALID_SOCKET\n",s);
+        printf("INVALID_SOCKET\n");
     }
     else
     {
