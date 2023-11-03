@@ -128,153 +128,39 @@ struct Client_params
 
 static void client_thread_function(Client_params* params)
 {
-
-    // sockaddr_in server_addr;
-
-    // //set ip address:
-    // inet_pton(AF_INET, params.server_ip.c_str(), &server_addr.sin_addr);
-    // //set port:
-    // server_addr.sin_port = htons(params.server_port);
-    // // set protocol
-    // server_addr.sin_family = AF_INET;    
-
-    // SOCKET client_socket = socket(AF_INET, SOCK_STREAM, 0);
-
-    // connect(client_socket, res->ai_addr, res->ai_addrlen);
-
-
-
-    // closesocket(client_socket)
-
-    // int sockfd, numbytes;  
-    // char buf[10]="";
-    // struct addrinfo hints;
-    // struct addrinfo *servinfo;
-    // struct addrinfo *p;
-    // int rv;
-    // char s[INET6_ADDRSTRLEN];
-
-    // //wait for server to connect
-    // //Sleep(1000);
-
-    // std::this_thread::sleep_for(1000ms);
-
-    // printf("client thread started\n");
-
-
-    // memset(&hints, 0, sizeof hints);
-    // hints.ai_family = AF_UNSPEC;
-    // hints.ai_socktype = SOCK_STREAM;
-
-    // if ((rv = getaddrinfo(params->server_ip.c_str(), "60000", &hints, &servinfo)) != 0) {
-    //     fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-    //     return;
-    // }
-
-    // // loop through all the results and connect to the first we can
-    // for(p = servinfo; p != NULL; p = p->ai_next) {
-    //     if ((sockfd = socket(p->ai_family, p->ai_socktype,
-    //             p->ai_protocol)) == -1) {
-    //         perror("client: socket");
-    //         continue;
-    //     }
-
-    //     if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-    //         #ifdef WIN32
-    //             closesocket(sockfd);
-    //         #else
-    //             close(sockfd);
-    //         #endif
-    //         perror("client: connect");
-    //         continue;
-    //     }
-
-    //     break;
-    // }
-
-    // if (p == NULL) {
-    //     fprintf(stderr, "client: failed to connect\n");
-    //     return;
-    // }
-
-    // inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
-    // printf("client: connecting to %s\n", s);
-
-    // freeaddrinfo(servinfo); // all done with this structure
-
     Simple_socket client_socket(false);
 
     bool success = client_socket.init(params->server_ip.c_str(),params->server_port);
 
     if (success)
     {
-        send(client_socket.get_raw_socket(), "1", 1, 0);
+        client_socket.send("1",1);
+
         //give server chance to respond
-        //Sleep(1000);
         using namespace std::chrono_literals;
         std::this_thread::sleep_for(1000ms);
-
         
         int numbytes;  
         char buf[10]="";
 
-        if ((numbytes = recv(client_socket.get_raw_socket(), buf, sizeof(buf)-1, 0)) == -1) {
+        numbytes = client_socket.recv(buf, sizeof(buf)-1);
+        if (numbytes == -1) 
+        {
             perror("recv");
             return;
         }
-
-        buf[numbytes] = '\0';
-
-        if ((numbytes == 1) && (buf[0] == '2'))
-        {
-            params->valid = true;
-            printf("client: received '%s'\n",buf);        
-        }
         else
         {
-            printf("client: received '%s'\n",buf);  
-        }   
-    
+            buf[numbytes] = '\0';
+        }
+       
+        if ((numbytes == 1) && (buf[0] == '2'))
+        {
+            params->valid = true;     
+        }
+ 
+        printf("client: received '%s'\n",buf);       
     }
-
-    // send(sockfd, "1", 1, 0);
-    // //give server chance to respond
-    // //Sleep(1000);
-    // using namespace std::chrono_literals;
-    // std::this_thread::sleep_for(1000ms);
-
-    // if ((numbytes = recv(sockfd, buf, sizeof(buf)-1, 0)) == -1) {
-    //     perror("recv");
-    //     return;
-    // }
-
-    // buf[numbytes] = '\0';
-
-    // if ((numbytes == 1) && (buf[0] == '2'))
-    // {
-    //     params->valid = true;
-    //     printf("client: received '%s'\n",buf);        
-    // }
-    // else
-    // {
-    //     printf("client: received '%s'\n",buf);  
-    //     #ifdef WIN32
-    //         closesocket(sockfd);
-    //     #else
-    //         close(sockfd);
-    //     #endif
-    //     return;
-    // }   
-    
-
-    // #ifdef WIN32
-    //     closesocket(sockfd);
-    // #else
-    //     close(sockfd);
-    // #endif
-
-    // //params->valid = true;
-  
 }
 
 
@@ -315,26 +201,6 @@ int test1()
     return -1;
 }
 
-// char *get_ip_str(const struct sockaddr *sa, char *s, size_t maxlen)
-// {
-//     switch(sa->sa_family) {
-//         case AF_INET:
-//             inet_ntop(AF_INET, &(((struct sockaddr_in *)sa)->sin_addr),
-//                     s, maxlen);
-//             break;
-
-//         case AF_INET6:
-//             inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)sa)->sin6_addr),
-//                     s, maxlen);
-//             break;
-
-//         default:
-//             strncpy(s, "Unknown AF", maxlen);
-//             return NULL;
-//     }
-
-//     return s;
-// }
 
 int main() {
     Simple_socket_library simple;
@@ -351,10 +217,6 @@ int main() {
     // server join
     // verify results (passed by pointer/reference)
 
-    // print_socket(0);
-    // print_socket(1);
-    // print_socket(INVALID_SOCKET);
-
     int res = test1();
 
     if (res != 0)
@@ -366,27 +228,6 @@ int main() {
     {
         printf(GREEN "[SUCCESS]" NC ": test1() succeeded!\n");
     }
-
-
-    // struct addrinfo hints, *res;
-    // // first, load up address structs with getaddrinfo():
-    // memset(&hints, 0, sizeof hints);
-    // hints.ai_family = AF_UNSPEC;  // use IPv4 or IPv6, whichever
-    // hints.ai_socktype = SOCK_STREAM;
-    // hints.ai_flags = AI_PASSIVE;     // fill in my IP for me
-
-    // uint16_t port = 60000;
-    // getaddrinfo(NULL, std::to_string(port).c_str(), &hints, &res);
-
-    // for(struct addrinfo* r=res; r!=nullptr; r=r->ai_next)
-    // {
-    //     struct sockaddr ai_addr = *r->ai_addr;
-    //     size_t ai_addrlen = r->ai_addrlen;
-
-    //     char ip_string[100]="";
-    //     get_ip_str(&ai_addr, ip_string, ai_addrlen);
-    //     printf("my ip: %s\n", ip_string);
-    // }
 
     return 0; 
 }

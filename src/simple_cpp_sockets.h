@@ -299,13 +299,9 @@ public:
             return m_initialized;
         }
 
-        char buf[10]="";
         struct addrinfo hints={0};
         struct addrinfo *servinfo=nullptr;
-        struct addrinfo *p=nullptr;
         int res;
-        char s[INET6_ADDRSTRLEN];
-
 
         hints.ai_family = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
@@ -317,7 +313,7 @@ public:
         }
 
         // loop through all the results and connect to the first we can
-        for(p = servinfo; p != NULL; p = p->ai_next) 
+        for(auto p = servinfo; p != nullptr; p = p->ai_next) 
         {
             SOCKET temp_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 
@@ -342,9 +338,16 @@ public:
             else
             {
                 m_socket = temp_socket;
+                char s[INET6_ADDRSTRLEN]="";
+                inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
+                printf("client: connecting to %s\n", s);
+                m_initialized = true;
                 break;
             }            
         }
+
+        freeaddrinfo(servinfo); // all done with this structure
+        servinfo = nullptr;
 
         if (m_socket == INVALID_SOCKET)
         {
@@ -352,15 +355,8 @@ public:
             return m_initialized;
         }
 
-        inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
-        printf("client: connecting to %s\n", s);
-
-        freeaddrinfo(servinfo); // all done with this structure
-
-        m_initialized = true;
-
-        return m_initialized;
-        
+    
+        return m_initialized;        
     }
 
     bool init(void)
@@ -475,8 +471,28 @@ public:
     {
         return m_socket;
     }
-    // void send(void);
-    // void recv(void);
+
+
+    int send(const char* buffer, size_t length, int flags=0)
+    {
+        int res = -1;
+        if (m_initialized && !m_server && buffer != nullptr && length>0 && length<=INT32_MAX)
+        {
+            res = ::send(m_socket, buffer, length, flags);
+        }  
+        return res;      
+    }
+
+    int recv(char* buffer, size_t length, int flags=0)
+    {
+        int res = -1;
+        if (m_initialized && !m_server && buffer != nullptr && length>0 && length<=INT32_MAX)
+        {
+            res = ::recv(m_socket, buffer, length, flags);
+        }
+        
+        return res;
+    }
 
 private:
 
