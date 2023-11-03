@@ -1,9 +1,13 @@
 #include "simple_cpp_sockets.h"
 
+//#define USE_SEMAPHORE
+
 #include <chrono>
 using namespace std::chrono_literals;
 #include <string>
+#ifdef USE_SEMAPHORE
 #include <semaphore>
+#endif
 #include <thread> 
 
 
@@ -21,7 +25,9 @@ struct Server_params
     std::string server_ip;
     uint16_t server_port;
     bool valid;
+    #ifdef USE_SEMAPHORE
     std::binary_semaphore* init_completed_sem;
+    #endif
 };
 
 static void server_thread_function(Server_params* params)
@@ -29,7 +35,9 @@ static void server_thread_function(Server_params* params)
     Server_socket server;
     server.init(params->server_ip, params->server_port);
 
+    #ifdef USE_SEMAPHORE
     params->init_completed_sem->release();
+    #endif
 
     int state = 0;
     SOCKET client_socket = INVALID_SOCKET;
@@ -123,25 +131,37 @@ struct Client_params
 
     int client_id;
     bool valid;
-
+    #ifdef USE_SEMAPHORE
     std::binary_semaphore* init_completed_sem;
-    //semaphore
+    #endif
 };
 
 static void client_thread_function(Client_params* params)
 {
     Simple_socket client_socket(false);
 
-    bool success = client_socket.init(params->server_ip.c_str(),params->server_port);
+    bool success=false;
+
+    #ifdef USE_SEMAPHORE
+    params->init_completed_sem->acquire();
+    #endif
+
+    #ifndef USE_SEMAPHORE
+    while(!success)
+    {
+    #endif
+        success = client_socket.init(params->server_ip.c_str(),params->server_port);
+    #ifndef USE_SEMAPHORE
+        if(!success)
+        {
+            std::this_thread::sleep_for(50ms);
+        }
+    }
+    #endif
 
     if (success)
     {
         client_socket.send("1",1);
-
-        //give server chance to respond
-        // using namespace std::chrono_literals;
-        // std::this_thread::sleep_for(1000ms);
-        params->init_completed_sem->acquire();
         
         int numbytes;  
         char buf[10]="";
@@ -174,14 +194,25 @@ static void foo(Server_params* params)
 
 int test1()
 {
+       
+    #ifdef USE_SEMAPHORE
     std::binary_semaphore init_completed_sem{0};
+    #endif
 
     // Server_params server_params={"0.0.0.0", 60000, false};
     // Server_params server_params={"", 60000, false};
-    Server_params server_params={"127.0.0.1", 60000, false, &init_completed_sem};
+    Server_params server_params={"127.0.0.1", 60000, false
+    #ifdef USE_SEMAPHORE
+    ,&init_completed_sem
+    #endif    
+    };
 
     // Client_params client_params={"", 60000, 1, false};
-    Client_params client_params={"127.0.0.1", 60000, 1, false, &init_completed_sem};
+    Client_params client_params={"127.0.0.1", 60000, 1, false
+    #ifdef USE_SEMAPHORE
+    ,&init_completed_sem
+    #endif    
+    };
 
 
     std::thread server_thread(server_thread_function, &server_params); 
