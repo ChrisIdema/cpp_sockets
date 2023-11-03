@@ -162,6 +162,27 @@ static SOCKET ts_accept(SOCKET socket, struct sockaddr* addr, socklen_t* addrlen
 }
 #endif
 
+// get sockaddr, IPv4 or IPv6:
+static void *get_in_addr(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET)
+    {
+        return &(((struct sockaddr_in*)sa)->sin_addr);
+    }
+
+    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+}
+
+static uint16_t get_in_port(struct sockaddr *sa)
+{
+    if (sa->sa_family == AF_INET)
+    {
+        return ((struct sockaddr_in*)sa)->sin_port;
+    }
+
+    return ((struct sockaddr_in6*)sa)->sin6_port;
+}
+
 static inline void print_socket(SOCKET s)
 {
     if (s==INVALID_SOCKET)
@@ -178,34 +199,46 @@ static inline void print_socket(SOCKET s)
 
 class Simple_socket {
 public:
-    enum class Simple_socketType {
-        UNKNOWN,
-        STREAM = SOCK_STREAM,
-        DGRAM = SOCK_DGRAM        
-    };
-
-    Simple_socket(Simple_socketType socket_type=Simple_socketType::UNKNOWN)
+    Simple_socket(bool server=false)
         : 
         m_socket(INVALID_SOCKET),
         m_addr({0}),
         m_address_valid(false),
         m_initialized(false),
-        m_type(socket_type)
+        m_server(server),
+        m_server_ip(""),
+        m_server_port(0)
     {
     }
 
-    Simple_socket(Simple_socketType socket_type, std::string ip_address, uint16_t port)
+    Simple_socket(bool server, std::string ip_address, uint16_t port)
         : 
         m_socket(INVALID_SOCKET),
         m_addr({0}),
         m_address_valid(false),
         m_initialized(false),
-        m_type(socket_type)
+        m_server(server),
+        m_server_ip(ip_address),
+        m_server_port(port)
     {
-        int res = inet_pton(AF_INET, ip_address.c_str(), &m_addr.sin_addr);
-        m_addr.sin_port = htons(port);
+        if (m_server)
+        {
+            set_address_server();          
+        }
+        else // client
+        {
+            m_address_valid = true;
+        }
+    }
+
+    void set_address_server()
+    {
+        //m_server_ip.clear();
+        int res = inet_pton(AF_INET, m_server_ip.c_str(), &m_addr.sin_addr);
+        m_addr.sin_port = htons(m_server_port);
         m_address_valid = res != INVALID_SOCKET; 
         printf("inet_pton res: %d\n",res);  
+        //m_server_ip.clear();  
     }
 
 
@@ -214,17 +247,16 @@ public:
         close();
     }
 
-
-    bool init(void)
+    bool init_server(void)
     {
         if (m_initialized)
         {
             return true;
         }
 
-        if (m_type != Simple_socketType::UNKNOWN && m_address_valid)
+        if (m_address_valid)
         {
-            SOCKET socket = ::socket(AF_INET, static_cast<int>(m_type), 0);  
+            SOCKET socket = ::socket(AF_INET, SOCK_STREAM, 0);  
             //m_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
             if (socket == INVALID_SOCKET)
             {
@@ -260,7 +292,92 @@ public:
         return m_initialized;
     }
 
-    bool init(Simple_socketType socket_type, std::string ip_address, uint16_t port)
+    bool init_client(void)
+    {
+        if (m_initialized)
+        {
+            return m_initialized;
+        }
+
+        char buf[10]="";
+        struct addrinfo hints={0};
+        struct addrinfo *servinfo=nullptr;
+        struct addrinfo *p=nullptr;
+        int res;
+        char s[INET6_ADDRSTRLEN];
+
+
+        hints.ai_family = AF_UNSPEC;
+        hints.ai_socktype = SOCK_STREAM;
+        res = getaddrinfo(m_server_ip.c_str(), std::to_string(m_server_port).c_str(), &hints, &servinfo);
+        if (res != 0) 
+        {
+            fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+            return m_initialized;
+        }
+
+        // loop through all the results and connect to the first we can
+        for(p = servinfo; p != NULL; p = p->ai_next) 
+        {
+            SOCKET temp_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+
+            if (temp_socket == INVALID_SOCKET) 
+            {
+                perror("client: socket");
+                continue;
+            }
+
+            res = connect(temp_socket, p->ai_addr, p->ai_addrlen);
+
+            if (res == SOCKET_ERROR) 
+            {
+                #ifdef WIN32
+                    closesocket(temp_socket);
+                #else
+                    close(temp_socket);
+                #endif
+                perror("client: connect");
+                continue;
+            }
+            else
+            {
+                m_socket = temp_socket;
+                break;
+            }            
+        }
+
+        if (m_socket == INVALID_SOCKET)
+        {
+            fprintf(stderr, "client: failed to connect\n");
+            return m_initialized;
+        }
+
+        inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, sizeof s);
+        printf("client: connecting to %s\n", s);
+
+        freeaddrinfo(servinfo); // all done with this structure
+
+        m_initialized = true;
+
+        return m_initialized;
+        
+    }
+
+    bool init(void)
+    {
+        if (m_server)
+        {
+            return init_server();
+        }
+        else
+        {
+            return init_client();
+        }     
+    }
+
+
+
+    bool init(std::string ip_address, uint16_t port)
     {
         if (m_initialized)
         {
@@ -268,14 +385,14 @@ public:
             return true;
         }
 
-        m_type = socket_type;
-        int res = inet_pton(AF_INET, ip_address.c_str(), &m_addr.sin_addr);
-        m_addr.sin_port = htons(port);
-        m_address_valid = res != SOCKET_ERROR;      
-        printf("inet_pton res: %d\n", res);
+        m_server_ip = ip_address;
+        m_server_port = port;
 
-        //printf("WSAGetLastError(): %d\n",WSAGetLastError());
-
+        if (m_server)
+        {
+            set_address_server();
+        }
+        
         return init();
     }
 
@@ -365,33 +482,13 @@ private:
 
     SOCKET m_socket;
     sockaddr_in m_addr;
+    std::string m_server_ip;
+    uint16_t m_server_port;
     bool m_address_valid;
     bool m_initialized;
-    Simple_socketType m_type;
-    void set_port(u_short port);
-    int set_address(const std::string& ip_address);
+    bool m_server;
 };
 
-// get sockaddr, IPv4 or IPv6:
-static void *get_in_addr(struct sockaddr *sa)
-{
-    if (sa->sa_family == AF_INET)
-    {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
-    }
-
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
-}
-
-static uint16_t get_in_port(struct sockaddr *sa)
-{
-    if (sa->sa_family == AF_INET)
-    {
-        return ((struct sockaddr_in*)sa)->sin_port;
-    }
-
-    return ((struct sockaddr_in6*)sa)->sin6_port;
-}
 
 
 class Server_socket
@@ -400,7 +497,7 @@ public:
     Server_socket()
         : 
         m_initialized(false),
-        m_socket(Simple_socket())
+        m_socket(Simple_socket(true))
         #ifndef _WIN32
         ,m_largest_fd(-1)
         #endif
@@ -420,7 +517,7 @@ public:
         if(!m_initialized)
         {        
             printf("calling m_socket.init\n");
-            m_initialized = m_socket.init(Simple_socket::Simple_socketType::STREAM, ip_address, port);
+            m_initialized = m_socket.init(ip_address, port);
             if (m_initialized)
             {    
                 int res = m_socket.listen(number_of_connections);
