@@ -64,7 +64,7 @@ static void server_thread_function(Server_params* params)
                             {
                                 state = 2;
                                 send(event.client, "2", 1, 0); // response
-                                std::this_thread::sleep_for(1000ms);//wait for tx to complete
+                                //std::this_thread::sleep_for(1000ms);//wait for tx to complete
                             }
                         }
                     }
