@@ -12,6 +12,7 @@ on:
 jobs:
   build-and-test-windows:
     runs-on: windows-latest
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
       - uses: ilammy/msvc-dev-cmd@v1
@@ -23,6 +24,7 @@ jobs:
         working-directory: ./src     
   build-and-test-linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
       - name: Build on Linux
