@@ -402,7 +402,7 @@ public:
         if (m_initialized)
         {
             #ifdef WIN32
-                ::closesocket(m_initialized);
+                ::closesocket(m_socket);
             #else
                 ::close(m_socket);
             #endif
@@ -540,6 +540,8 @@ public:
         client_error,
         rx,    
     };
+
+    
 
     struct Event
     {
