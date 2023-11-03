@@ -332,9 +332,9 @@ public:
             if (res == SOCKET_ERROR) 
             {
                 #ifdef WIN32
-                    closesocket(temp_socket);
+                    ::closesocket(temp_socket);
                 #else
-                    close(temp_socket);
+                    ::close(temp_socket);
                 #endif
                 perror("client: connect");
                 continue;
