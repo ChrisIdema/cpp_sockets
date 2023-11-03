@@ -1,21 +1,19 @@
-//#include "simple_cpp_sockets.h"
 #include "simple_cpp_sockets.h"
 
-#include <thread> 
+#include <chrono>
+using namespace std::chrono_literals;
 #include <string>
+#include <semaphore>
+#include <thread> 
 
+
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <cstdint>
 
 #define RED   "\033[0;31m"
 #define GREEN "\033[0;32m"
 #define NC    "\033[0m"
-
-//#include <windows.h>
-#include <chrono>
-using namespace std::chrono_literals;
-
 
 
 struct Server_params
@@ -23,12 +21,15 @@ struct Server_params
     std::string server_ip;
     uint16_t server_port;
     bool valid;
+    std::binary_semaphore* init_completed_sem;
 };
 
 static void server_thread_function(Server_params* params)
 {
     Server_socket server;
     server.init(params->server_ip, params->server_port);
+
+    params->init_completed_sem->release();
 
     int state = 0;
     SOCKET client_socket = INVALID_SOCKET;
@@ -123,6 +124,7 @@ struct Client_params
     int client_id;
     bool valid;
 
+    std::binary_semaphore* init_completed_sem;
     //semaphore
 };
 
@@ -137,8 +139,9 @@ static void client_thread_function(Client_params* params)
         client_socket.send("1",1);
 
         //give server chance to respond
-        using namespace std::chrono_literals;
-        std::this_thread::sleep_for(1000ms);
+        // using namespace std::chrono_literals;
+        // std::this_thread::sleep_for(1000ms);
+        params->init_completed_sem->acquire();
         
         int numbytes;  
         char buf[10]="";
@@ -171,12 +174,14 @@ static void foo(Server_params* params)
 
 int test1()
 {
+    std::binary_semaphore init_completed_sem{0};
+
     // Server_params server_params={"0.0.0.0", 60000, false};
     // Server_params server_params={"", 60000, false};
-    Server_params server_params={"127.0.0.1", 60000, false};
+    Server_params server_params={"127.0.0.1", 60000, false, &init_completed_sem};
 
     // Client_params client_params={"", 60000, 1, false};
-    Client_params client_params={"127.0.0.1", 60000, 1, false};
+    Client_params client_params={"127.0.0.1", 60000, 1, false, &init_completed_sem};
 
 
     std::thread server_thread(server_thread_function, &server_params); 
