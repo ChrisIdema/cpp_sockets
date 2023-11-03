@@ -15,11 +15,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: ilammy/msvc-dev-cmd@v1
-      - name: potential speed up
-        run: Set-MpPreference -DisableRealtimeMonitoring $true
-        shell: powershell
       - name: Build on Windows
-        run: cl main.cpp simple_cpp_sockets.cpp /EHsc
+        run: cl main.cpp simple_cpp_sockets.cpp /EHsc /MP
         working-directory: ./src
       - name: test on Windows
         run: ./main.exe
