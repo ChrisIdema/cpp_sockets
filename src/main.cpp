@@ -67,12 +67,11 @@ static void server_thread_function(Server_params* params)
                         if(event.bytes_available==1)
                         {
                             char buffer[1+1] = "";
-                            recv(event.client,buffer, sizeof(buffer)-1,0);
+                            event.client.recv(buffer, sizeof(buffer)-1,0);
                             if(buffer[0]=='1')
                             {
                                 state = 2;
-                                send(event.client, "2", 1, 0); // response
-                                //std::this_thread::sleep_for(1000ms);//wait for tx to complete
+                                event.client.send("2", 1, 0); // response
                             }
                         }
                     }
@@ -92,36 +91,6 @@ static void server_thread_function(Server_params* params)
     }
 
     params->valid = state == 3;
-
-    // Server_socket server;
-    // server.init("", 60000);
-
-    // for(int i=0;i<4;++i)
-    // {
-    //     auto events = server.wait_for_events();
-    //     for(const auto& event: events)
-    //     {
-    //         printf("event: %s\n", event.to_string().c_str());
-    //         if (event.event_code == Server_socket::Event_code::rx)
-    //         {
-    //             char buffer[100+1] = "";
-    //             recv(event.client,buffer, sizeof(buffer)-1,0);
-    //             send(event.client, "Hi\n", 3, 0); // response
-    //             printf("received (%d): %s\n", event.bytes_available, buffer);
-    //             params->valid = event.bytes_available==1 && buffer[0]=='1';
-    //         }
-    //     }
-    // }
-
-    // // send to all clients:
-    // auto connected_clients = server.get_client_list();
-    // for(const auto& client: connected_clients)
-    // {
-    //     send(client, "bye\n", 4, 0); 
-    // }
-
-    // printf("valid: (%d)\n", params->valid);
-
 }
 
 struct Client_params
@@ -237,21 +206,9 @@ int test1()
     return -1;
 }
 
-
-int main() {
+int main() 
+{
     Simple_socket_library simple;
-
-    // create semaphore
-    // start server thread
-    // start client thread 1
-    // start client thread 2
-    // trigger both client threads waiting on semaphore using release(2)
-    // clients should connect and send and receive some data
-    // client 1 join
-    // client 2 join
-    // close server
-    // server join
-    // verify results (passed by pointer/reference)
 
     int res = test1();
 
