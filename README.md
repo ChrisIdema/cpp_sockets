@@ -16,19 +16,16 @@ It's currently no longer header-only for Windows.
 
 ## Build
 - To build and run the test application on Linux open a terminal and run:
-    - `cd src`
-    - `g++ main.cpp -o main`
+    - `g++ -std=c++17 test/main.cpp -o main -Isrc`
     - `./main`
 
 - To build and run the test application on Windows either use Visual Studio directly or open the `Developer Command Prompt` and run:
-    - `cd src`
-    - `cl main.cpp simple_cpp_sockets.cpp /EHsc`
+    - `cl test/main.cpp -Isrc /EHsc /std:c++17`
     - `start main.exe`
 
 
 ## Project Structure
 - `src/simple_cpp_sockets.h` is the library
-- `src/simple_cpp_sockets.cpp` is needed for Windows
 - `src/main.cpp` is a demo application/unit test
 
 ## Links
