@@ -28,7 +28,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build on Linux
-        run: g++ -std=c++17 test/main.cpp -o main -Isrc
+        run: g++ -std=c++17 -Wall test/main.cpp -o main -Isrc 
         working-directory: .
       - name: test on Linux
         run: ./main
