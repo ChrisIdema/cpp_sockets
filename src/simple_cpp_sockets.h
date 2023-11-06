@@ -643,7 +643,7 @@ public:
                 FD_SET(m_socket.get_native(),&m_socket_set);
                 m_socket_list.push_back(m_socket.get_raw_socket());   
                 #ifndef _WIN32
-                m_largest_fd = m_socket.get_raw_socket();
+                m_largest_fd = m_socket.get_native();
                 #endif
             }
         }
