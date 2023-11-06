@@ -78,7 +78,7 @@ class Simple_socket_library
 static int ts_bind(SOCKET socket, const struct sockaddr* name, int namelen, int* wsa_error=nullptr)
 {
     const std::lock_guard<std::mutex> lock(socket_mutex);  // needed because WSAGetLastError might not be thread safe, todo: check
-    int res = bind(socket, name, namelen);
+    int res = ::bind(socket, name, namelen);
 
     if(res == SOCKET_ERROR);
     {
@@ -97,7 +97,7 @@ static SOCKET ts_accept(SOCKET socket, struct sockaddr* addr, int* addrlen, int*
 {
     const std::lock_guard<std::mutex> lock(socket_mutex); // needed because WSAGetLastError might not be thread safe, todo: check
 
-    SOCKET new_socket = accept(socket, addr, addrlen);
+    SOCKET new_socket = ::accept(socket, addr, addrlen);
 
     if (new_socket == INVALID_SOCKET)
     {
@@ -196,6 +196,133 @@ static inline void print_socket(SOCKET s)
 }
 
 
+//raw socket only stores native socket type and has no other state, reading error codes may not be thread safe, no automatic closing
+class Raw_socket
+{
+    public:
+    Raw_socket(SOCKET raw_socket=INVALID_SOCKET)
+    : m_socket(raw_socket)
+    {
+
+    }
+
+    Raw_socket(int family, int socket_type, int protocol)
+    {
+        m_socket = ::socket(family, socket_type, protocol);
+    }
+
+
+    SOCKET accept(struct sockaddr* addr, socklen_t* addrlen)
+    {
+        SOCKET s = INVALID_SOCKET;
+
+        if(valid())
+        {
+            s = ::accept(m_socket, addr, addrlen);
+        }
+
+        return s;
+    }
+    
+    bool valid() const{ return m_socket != INVALID_SOCKET;}
+    SOCKET get_native() const{return m_socket;}
+
+    bool operator==(const Raw_socket& rhs) const {return m_socket == rhs.m_socket;}
+    bool operator!=(const Raw_socket& rhs) const {return m_socket != rhs.m_socket;}
+
+    int close()
+    {
+        int res = SOCKET_ERROR;
+        if (valid())
+        {            
+            #ifdef WIN32
+                res = ::closesocket(m_socket);
+            #else
+                res = ::close(m_socket);
+            #endif
+
+            m_socket = INVALID_SOCKET;
+        }
+
+        return res;
+    }
+
+    int bind(const struct sockaddr* name, int namelen)
+    {
+        int res = ::bind(m_socket, name, namelen);
+        return res;
+    }
+
+    int connect(const struct sockaddr* name, int namelen)
+    {
+        int res = ::connect(m_socket, name, namelen);
+        return res;
+    }
+
+    void print() const
+    {
+        if (valid())
+        {            
+            printf(SOCKET_FORMAT_STRING"\n", m_socket);
+        }
+        else
+        {
+            printf("INVALID_SOCKET\n");
+        }
+    }
+
+    int setsockop_bool(int optname, bool value) const
+    {
+        int res;
+        #ifdef WIN32
+        //https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-setsockopt
+        const BOOL converted_param = value;        
+        res = ::setsockopt(m_socket, SOL_SOCKET, optname, (char *)&converted_param, sizeof(converted_param));
+        #else
+        const int converted_param = value;
+        res = ::setsockopt(m_socket, SOL_SOCKET, optname, &converted_param, sizeof(converted_param));
+        #endif
+        return res;
+    }
+
+    int listen(int backlog) const
+    {  
+        int res = SOCKET_ERROR;
+        if (valid())
+        {
+            res = ::listen(m_socket, backlog);
+        }
+
+        return res;
+    }
+
+
+    int send(const char* buffer, size_t length, int flags=0) const
+    {
+        int res = SOCKET_ERROR;
+        if (valid() && buffer != nullptr && length>0 && length<=INT32_MAX)
+        {
+            res = ::send(m_socket, buffer, length, flags);
+        }  
+        return res;    
+    }
+
+    int recv(char* buffer, size_t length, int flags=0) const
+    {
+        int res = SOCKET_ERROR;
+        if (valid() && buffer != nullptr && length>0 && length<=INT32_MAX)
+        {
+            res = ::recv(m_socket, buffer, length, flags);
+        }
+        
+        return res;
+    }
+
+    private:
+    SOCKET m_socket;
+};
+
+
 
 class Simple_socket {
 public:
@@ -256,21 +383,12 @@ public:
 
         if (m_address_valid)
         {
-            SOCKET socket = ::socket(AF_INET, SOCK_STREAM, 0);  
-            //m_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-            if (socket == INVALID_SOCKET)
-            {
-                m_socket = INVALID_SOCKET;
-            }
-            else
-            {
-                m_socket = socket;
-            }
+            m_socket = Raw_socket(AF_INET, SOCK_STREAM, 0);
 
             printf("m_socket: ");
-            print_socket(m_socket);
+            m_socket.print();
 
-            if (m_socket == INVALID_SOCKET)
+            if (!m_socket.valid())
             {
                 printf("error\n");
                 //printf("WSAGetLastError(): %d\n",WSAGetLastError());
@@ -315,23 +433,21 @@ public:
         // loop through all the results and connect to the first we can
         for(auto p = servinfo; p != nullptr; p = p->ai_next) 
         {
-            SOCKET temp_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+            // SOCKET temp_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+            Raw_socket temp_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 
-            if (temp_socket == INVALID_SOCKET) 
+            if (!temp_socket.valid()) 
             {
                 perror("client: socket");
                 continue;
             }
 
-            res = connect(temp_socket, p->ai_addr, p->ai_addrlen);
+            res = temp_socket.connect(p->ai_addr, p->ai_addrlen);
 
             if (res == SOCKET_ERROR) 
             {
-                #ifdef WIN32
-                    ::closesocket(temp_socket);
-                #else
-                    ::close(temp_socket);
-                #endif
+                temp_socket.close();
+
                 perror("client: connect");
                 continue;
             }
@@ -349,7 +465,7 @@ public:
         freeaddrinfo(servinfo); // all done with this structure
         servinfo = nullptr;
 
-        if (m_socket == INVALID_SOCKET)
+        if (!m_socket.valid())
         {
             fprintf(stderr, "client: failed to connect\n");
             return m_initialized;
@@ -397,39 +513,19 @@ public:
     {
         if (m_initialized)
         {
-            #ifdef WIN32
-                ::closesocket(m_socket);
-            #else
-                ::close(m_socket);
-            #endif
-            m_initialized = false;
-            m_socket = INVALID_SOCKET;
+            m_socket.close();
         }
     }
 
-    //todo add params
 
-    int setsockop_bool(int optname, bool value)
-    {
-        int res;
-        #ifdef WIN32
-        //https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-setsockopt
-        const BOOL converted_param = value;        
-        res = ::setsockopt(m_socket, SOL_SOCKET, optname, (char *)&converted_param, sizeof(converted_param));
-        #else
-        const int converted_param = value;
-        res = ::setsockopt(m_socket, SOL_SOCKET, optname, &converted_param, sizeof(converted_param));
-        #endif
-        return res;
-    }
 
     int set_options()
     {
         int res;
-        res = setsockop_bool(SO_KEEPALIVE, true);
+        res = m_socket.setsockop_bool(SO_KEEPALIVE, true);
         if (res != SOCKET_ERROR)
         {
-            res = setsockop_bool(SO_REUSEADDR, true);
+            res = m_socket.setsockop_bool(SO_REUSEADDR, true);
         }
 
         printf("setsockopt res: %d\n", res);
@@ -441,21 +537,22 @@ public:
     int bind()
     {
         int wsa_error = 0;
-        int res = ts_bind(m_socket,(const sockaddr *)&m_addr,sizeof(m_addr), &wsa_error);
-        printf("bind res: %d\n",res);
+        //int res = ts_bind(m_socket,(const sockaddr *)&m_addr,sizeof(m_addr), &wsa_error);
+        int res = m_socket.bind((const sockaddr *)&m_addr, sizeof(m_addr));
+        printf("bind res: %d\n", res);
         //printf("WSAGetLastError(): %d\n",WSAGetLastError());
         return res;
     }
 
     int listen(int backlog)
     {  
-        int res = -1;
+        int res = SOCKET_ERROR;
         if (m_initialized)
         {
-            res = ::listen(m_socket, backlog);
+            res = m_socket.listen(backlog);
             printf("listen res: %d\n",res);
             printf("listen m_socket: ");
-            print_socket(m_socket);
+            m_socket.print();
 
             //printf("WSAGetLastError(): %d\n",WSAGetLastError());
         }
@@ -467,7 +564,12 @@ public:
         return res;
     }
 
-    SOCKET get_raw_socket() const
+    SOCKET get_native() const
+    {
+        return m_socket.get_native();
+    }
+
+    Raw_socket get_raw_socket() const
     {
         return m_socket;
     }
@@ -478,7 +580,7 @@ public:
         int res = -1;
         if (m_initialized && !m_server && buffer != nullptr && length>0 && length<=INT32_MAX)
         {
-            res = ::send(m_socket, buffer, length, flags);
+            res = m_socket.send(buffer, length, flags);
         }  
         return res;      
     }
@@ -488,7 +590,7 @@ public:
         int res = -1;
         if (m_initialized && !m_server && buffer != nullptr && length>0 && length<=INT32_MAX)
         {
-            res = ::recv(m_socket, buffer, length, flags);
+            res = m_socket.recv(buffer, length, flags);
         }
         
         return res;
@@ -496,7 +598,7 @@ public:
 
 private:
 
-    SOCKET m_socket;
+    Raw_socket m_socket;
     sockaddr_in m_addr;
     std::string m_server_ip;
     uint16_t m_server_port;
@@ -538,7 +640,7 @@ public:
             {    
                 int res = m_socket.listen(number_of_connections);
 
-                FD_SET(m_socket.get_raw_socket(),&m_socket_set);
+                FD_SET(m_socket.get_native(),&m_socket_set);
                 m_socket_list.push_back(m_socket.get_raw_socket());   
                 #ifndef _WIN32
                 m_largest_fd = m_socket.get_raw_socket();
@@ -562,7 +664,7 @@ public:
     struct Event
     {
         Event_code event_code;
-        SOCKET client;
+        Raw_socket client;
         int bytes_available;      
         std::string to_string() const
         {
@@ -594,12 +696,15 @@ public:
             for(const auto& raw_socket: m_socket_list_copy)
             {
                 printf("checking events for: ");
-                print_socket(raw_socket);
+                //print_socket(raw_socket);
+                raw_socket.print();
+
                 
-                if (FD_ISSET(raw_socket, &event_socket_set)) //new event 
+                if (FD_ISSET(raw_socket.get_native(), &event_socket_set)) //new event 
                 { 
                     printf("Event for socket: ");
-                    print_socket(raw_socket);
+                    //print_socket(raw_socket);
+                    raw_socket.print();
 
                     if (raw_socket == m_socket.get_raw_socket()) //server event
                     {                    
@@ -607,24 +712,25 @@ public:
                         //struct sockaddr_in remoteaddr; // client address                        
                         socklen_t addrlen = sizeof(remoteaddr);    
                         int wsa_error = 0;
-                        SOCKET res = ts_accept(m_socket.get_raw_socket(), (struct sockaddr *)&remoteaddr, &addrlen, &wsa_error);
 
-                        printf("server_event\n");
+                        //SOCKET res = ts_accept(m_socket.get_raw_socket(), (struct sockaddr *)&remoteaddr, &addrlen, &wsa_error);
+                        //printf("server_event\n");
+                        Raw_socket new_socket = m_socket.get_raw_socket().accept((struct sockaddr *)&remoteaddr, &addrlen);
 
-                        if (res == INVALID_SOCKET)
+
+                        if (!new_socket.valid())
                         {
-                            printf("accept failed: %d\n", wsa_error);
+                            //printf("accept failed: %d\n", wsa_error);
                         } 
                         else 
                         {
-                            SOCKET new_socket = res; 
-                            FD_SET(new_socket, &m_socket_set); // add to master set
+                            FD_SET(new_socket.get_native(), &m_socket_set); // add to master set
                             m_socket_list.push_back(new_socket);  
 
                             #ifndef _WIN32
-                                if (new_socket > m_largest_fd)
+                                if (new_socket.get_native() > m_largest_fd)
                                 {
-                                    m_largest_fd = new_socket;
+                                    m_largest_fd = new_socket.get_native();
                                 }                            
                             #endif
              
@@ -633,7 +739,7 @@ public:
                             uint16_t port = ntohs(get_in_port((struct sockaddr*)&remoteaddr));
 
                             printf("selectserver: new connection from %s:%u on socket ", address, port);
-                            print_socket(new_socket);
+                            new_socket.print();
 
                             Event event = {Event_code::client_connected, raw_socket, 0};
                             events.push_back(event);
@@ -642,7 +748,7 @@ public:
                     else //client event
                     {                        
                         uint8_t buffer[1024];
-                        int peek = recv(raw_socket, (char*)buffer, sizeof(buffer), MSG_PEEK);
+                        int peek = raw_socket.recv((char*)buffer, sizeof(buffer), MSG_PEEK);
 
                         if (peek < 0)
                         {
@@ -659,19 +765,19 @@ public:
 
                             Event event = {Event_code::client_disconnected, raw_socket, 0};
                             events.push_back(event);
-                            FD_CLR(raw_socket, &m_socket_set);     
+                            FD_CLR(raw_socket.get_native(), &m_socket_set);     
                             m_socket_list.remove(raw_socket);  
 
                             #ifndef _WIN32
                                 //if largest has been removed a new one needs to be calculated
-                                if (raw_socket == m_largest_fd) 
+                                if (raw_socket.get_native() == m_largest_fd) 
                                 {
                                     m_largest_fd = -1;
                                     for(const auto& fd: m_socket_list)
                                     {
-                                        if(fd > m_largest_fd)
+                                        if(fd.get_native() > m_largest_fd)
                                         {
-                                            m_largest_fd = fd;
+                                            m_largest_fd = fd.get_native();
                                         }
                                     }
                                 }                            
@@ -696,9 +802,9 @@ public:
         return events;
     }
 
-    std::list<SOCKET> get_client_list()
+    std::list<Raw_socket> get_client_list()
     {
-        std::list<SOCKET> client_list = m_socket_list;
+        std::list<Raw_socket> client_list = m_socket_list;
         client_list.remove(m_socket.get_raw_socket());
         return m_socket_list;
     }
@@ -709,7 +815,7 @@ public:
     Simple_socket m_socket;
 
     fd_set m_socket_set;
-    std::list<SOCKET> m_socket_list;
+    std::list<Raw_socket> m_socket_list;
     #ifndef _WIN32
     int m_largest_fd;
     #endif
