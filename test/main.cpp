@@ -40,7 +40,6 @@ static void server_thread_function(Server_params* params)
     #endif
 
     int state = 0;
-    SOCKET client_socket = INVALID_SOCKET;
 
     for(int i=0;i<3;++i)
     {
@@ -155,11 +154,6 @@ static void client_thread_function(Client_params* params)
     }
 }
 
-
-static void foo(Server_params* params)
-{
-    printf("Hello %s!\n",params->server_ip.c_str());
-}
 
 int test1()
 {
