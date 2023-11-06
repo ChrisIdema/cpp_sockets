@@ -256,11 +256,11 @@ public:
         : 
         m_socket(INVALID_SOCKET),
         m_addr({0}),
-        m_address_valid(false),
-        m_initialized(false),
-        m_server(server),
         m_server_ip(""),
-        m_server_port(0)
+        m_server_port(0),
+        m_address_valid(false),
+        m_initialized(false),        
+        m_server(server)
     {
     }
 
@@ -268,11 +268,11 @@ public:
         : 
         m_socket(INVALID_SOCKET),
         m_addr({0}),
+        m_server_ip(ip_address),
+        m_server_port(port),
         m_address_valid(false),
         m_initialized(false),
-        m_server(server),
-        m_server_ip(ip_address),
-        m_server_port(port)
+        m_server(server)
     {
         if (m_server)
         {
@@ -462,11 +462,8 @@ public:
 
     int bind()
     {
-        int wsa_error = 0;
-        //int res = ts_bind(m_socket,(const sockaddr *)&m_addr,sizeof(m_addr), &wsa_error);
         int res = m_socket.bind((const sockaddr *)&m_addr, sizeof(m_addr));
         printf("bind res: %d\n", res);
-        //printf("get_last_error(): %d\n", m_socket.get_last_error());
         return res;
     }
 
@@ -563,6 +560,7 @@ public:
             if (m_initialized)
             {    
                 int res = m_socket.listen(number_of_connections);
+                //todo proces res
 
                 FD_SET(m_socket.get_native(),&m_socket_set);
                 m_socket_list.push_back(m_socket.get_raw_socket());   
