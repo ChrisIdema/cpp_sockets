@@ -8,7 +8,6 @@ Simple library for TCP sockets in C++. Server uses select to receive events (suc
 
 Originally forked from https://github.com/computersarecool/cpp_sockets 
 I reimplemented the library to be event-based using select(). This allows the server thread to simply wait for events instead of polling or blocking on certain calls. I removed UDP. 
-It's currently no longer header-only for Windows.
 
 ## Tested On
 - Linux
