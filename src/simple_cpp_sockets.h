@@ -348,7 +348,7 @@ public:
         }
         else
         {
-           printf("not initialized\n"); 
+            printf("not initialized\n"); 
         }
 
         return m_initialized;
@@ -385,26 +385,46 @@ public:
                 perror("client: socket");
                 continue;
             }
+            
+            m_socket = temp_socket; // copy for set_options
+            res = set_options();
+            m_socket = INVALID_SOCKET;
+            
+            if (res == SOCKET_ERROR) 
+            {
+                perror("client set_options()");
+                temp_socket.close();
+                
+                continue;
+            }
+
 
             res = temp_socket.connect(p->ai_addr, p->ai_addrlen);
 
             if (res == SOCKET_ERROR) 
             {
+                perror("client connect()");
                 temp_socket.close();
-
-                perror("client: connect");
+                
                 continue;
             }
-            else
+
+            m_socket = temp_socket;
+        
+            char s[INET6_ADDRSTRLEN]="";
+            const char* inet_ntop_res = inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, INET6_ADDRSTRLEN);
+            if (inet_ntop_res != nullptr)
             {
-                m_socket = temp_socket;
-                char s[INET6_ADDRSTRLEN]="";
-                inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, INET6_ADDRSTRLEN);
-                printf("client: connecting to %s\n", s);
-                m_initialized = true;
-                break;
-            }            
+                printf("client: connected to %s\n", s);
+                //printf("client: connected to %s\n", inet_ntop_res);
+            }
+
+            
+            m_initialized = true;
+            break;         
+     
         }
+
 
         freeaddrinfo(servinfo); // all done with this structure
         servinfo = nullptr;
@@ -486,8 +506,8 @@ public:
         printf("bind res: %d\n", res);
         if (res == SOCKET_ERROR)
         {
-        	printf("bind error: %d\n",  m_socket.get_last_error());
-       	}
+            printf("bind error: %d\n",  m_socket.get_last_error());
+        }
         return res;
     }
 
@@ -576,7 +596,8 @@ public:
         #if defined(_WIN32)
         m_dummy_socket.close();
         #else
-        //close pipe?
+        close(pfd[0]);
+        close(pfd[1]);
         #endif
     }
 
@@ -586,49 +607,59 @@ public:
         if(!m_initialized)
         {        
             printf("calling m_socket.init\n");
-            m_initialized = m_socket.init(ip_address, port);
-            if (m_initialized)
+            bool valid = m_socket.init(ip_address, port);
+            if (valid)
             {    
                 int res = m_socket.listen(number_of_connections+1);//+1 for dummy socket or pipe
-                //todo proces res
-
-                add_socket_to_select(m_socket.get_raw_socket());
-
-                #if defined(_WIN32)
-                m_dummy_socket = Raw_socket(AF_INET, SOCK_STREAM, 0);
-                printf("dummy socket: ");
-                m_dummy_socket.print();
-                add_socket_to_select(m_dummy_socket);
-                #else
-                res = pipe(pfd);
-                printf("pipe(pfd): %d\n", res);
-                add_socket_to_select(pfd[0]);
-
-                /* Make read and write ends of pipe nonblocking */
-                int flags;
-                flags = fcntl(pfd[0], F_GETFL);
-                if (flags == -1)
+                
+                if (res != SOCKET_ERROR)
                 {
-                    printf("F_GETFL error\n");
-                }
-                    
-                flags |= O_NONBLOCK;                /* Make read end nonblocking */
-                if (fcntl(pfd[0], F_SETFL, flags) == -1)
-                {
-                    printf("F_SETFL error\n");
-                }
+                    add_socket_to_select(m_socket.get_raw_socket());
+                
 
-                flags = fcntl(pfd[1], F_GETFL);
-                if (flags == -1)
-                {    
-                    printf("F_GETFL error\n");
+                    #if defined(_WIN32)
+                    m_dummy_socket = Raw_socket(AF_INET, SOCK_STREAM, 0);
+                    if (m_dummy_socket.valid())
+                    {
+                        printf("dummy socket: ");
+                        m_dummy_socket.print();
+                        add_socket_to_select(m_dummy_socket);
+                        m_initialized = true;
+                    }
+                    #else
+                    res = pipe(pfd);
+                    printf("pipe(pfd): %d\n", res);
+
+                    if(res != SOCKET_ERROR)
+                    {
+                        add_socket_to_select(pfd[0]);
+                    }
+
+                    // Make read and write ends of pipe nonblocking 
+
+                    // Make read end nonblocking
+                    if(res != SOCKET_ERROR)
+                    {
+                        res = fcntl(pfd[0], F_GETFL);
+                    }                            
+                    if(res != SOCKET_ERROR)
+                    {                   
+                        res = fcntl(pfd[0], F_SETFL, res | O_NONBLOCK);
+                    }
+
+                    // Make write end nonblocking 
+                    if(res != SOCKET_ERROR)
+                    {
+                        res = fcntl(pfd[1], F_GETFL);
+                    }                            
+                    if(res != SOCKET_ERROR)
+                    {                   
+                        res = fcntl(pfd[1], F_SETFL, res | O_NONBLOCK);
+                    }
+
+                    m_initialized = res != SOCKET_ERROR;
+                    #endif
                 }
-                flags |= O_NONBLOCK;                /* Make write end nonblocking */
-                if (fcntl(pfd[1], F_SETFL, flags) == -1)
-                {
-                    printf("F_SETFL error\n");
-                }
-                #endif
             }
         }
     }
@@ -765,7 +796,7 @@ public:
                         else 
                         {
                             add_socket_to_select(new_socket);
-             
+            
                             char remoteIP[INET6_ADDRSTRLEN];
                             const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
                             uint16_t port = ntohs(get_in_port((struct sockaddr*)&remoteaddr));
