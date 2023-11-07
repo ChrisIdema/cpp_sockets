@@ -669,13 +669,15 @@ public:
                             if(error == 10038)
                             {
                                 printf("WSAENOTSOCK\n");
-                                m_socket.get_raw_socket().mark_as_closed();
-                                m_socket.close();
-
-                                Event event= {Event_code::not_initialized};
-                                events.push_back(event);
-                                return events;
                             }
+
+                            m_socket.get_raw_socket().mark_as_closed();
+                            m_socket.close();
+
+                            Event event= {Event_code::not_initialized};
+                            events.push_back(event);
+                            return events;
+                            
                         } 
                         else 
                         {
