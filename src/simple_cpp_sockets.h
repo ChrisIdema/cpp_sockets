@@ -558,8 +558,9 @@ public:
 
     ~Server_socket()
     {
-        //socket will be closed automatically
+        //m_socket will be closed automatically
         //close select?
+        m_dummy_socket.close();
     }
 
 
@@ -571,16 +572,50 @@ public:
             m_initialized = m_socket.init(ip_address, port);
             if (m_initialized)
             {    
-                int res = m_socket.listen(number_of_connections);
+                int res = m_socket.listen(number_of_connections+1);//+1 for dummy socket
                 //todo proces res
 
-                FD_SET(m_socket.get_native(),&m_socket_set);
-                m_socket_list.push_back(m_socket.get_raw_socket());   
-                #ifndef _WIN32
-                m_largest_fd = m_socket.get_native();
-                #endif
+                add_socket_to_select(m_socket.get_raw_socket());
+
+                m_dummy_socket = Raw_socket(AF_INET, SOCK_STREAM, 0);
+                printf("dummy socket: ");
+                m_dummy_socket.print();
+                add_socket_to_select(m_dummy_socket);
             }
         }
+    }
+
+    void add_socket_to_select(Raw_socket socket)
+    {
+        FD_SET(socket.get_native(), &m_socket_set);
+        m_socket_list.push_back(socket);  
+        #ifndef _WIN32
+        if (socket.get_native() > m_largest_fd)
+        {
+            m_largest_fd = socket.get_native();
+        }
+        #endif
+    }
+
+    void remove_socket_from_select(Raw_socket socket)
+    {
+        FD_CLR(socket.get_native(), &m_socket_set);     
+        m_socket_list.remove(socket);  
+
+        #ifndef _WIN32
+        //if largest has been removed a new one needs to be calculated
+        if (socket.get_native() == m_largest_fd) 
+        {
+            m_largest_fd = -1;
+            for(const auto& fd: m_socket_list)
+            {
+                if(fd.get_native() > m_largest_fd)
+                {
+                    m_largest_fd = fd.get_native();
+                }
+            }
+        }                            
+        #endif  
     }
 
     enum class Event_code
@@ -590,7 +625,8 @@ public:
         client_connected,
         client_disconnected,
         client_error,
-        rx,    
+        rx,
+        exit,    
     };
 
     
@@ -607,6 +643,12 @@ public:
             return s;
         }  
     };
+
+    void exit()
+    {
+        auto m_dummy_socket_copy = m_dummy_socket;        
+        m_dummy_socket_copy.close();        
+    }
 
     std::vector<Event> wait_for_events()
     {
@@ -626,19 +668,7 @@ public:
             if(res == SOCKET_ERROR)
             {
                 int error = m_socket.get_raw_socket().get_last_error();
-                printf("select error: %d\n", error);
-
-                if(error == 10038)
-                {
-                    printf("WSAENOTSOCK\n");
-                    m_socket.get_raw_socket().mark_as_closed();
-                    m_socket.close();
-
-                    Event event= {Event_code::not_initialized};
-                    events.push_back(event);
-                    return events;
-                }
-                
+                printf("select error: %d\n", error);            
             }
 
             auto m_socket_list_copy = m_socket_list;
@@ -646,7 +676,6 @@ public:
             {
                 printf("checking events for: ");
                 raw_socket.print();
-
                 
                 if (FD_ISSET(raw_socket.get_native(), &event_read_set)) //new event 
                 { 
@@ -681,15 +710,7 @@ public:
                         } 
                         else 
                         {
-                            FD_SET(new_socket.get_native(), &m_socket_set); // add to master set
-                            m_socket_list.push_back(new_socket);  
-
-                            #ifndef _WIN32
-                                if (new_socket.get_native() > m_largest_fd)
-                                {
-                                    m_largest_fd = new_socket.get_native();
-                                }                            
-                            #endif
+                            add_socket_to_select(new_socket);
              
                             char remoteIP[INET6_ADDRSTRLEN];
                             const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
@@ -702,10 +723,20 @@ public:
                             events.push_back(event);
                         }
                     }
+                    else if (raw_socket == m_dummy_socket) //exit event
+                    {
+                        printf("m_dummy_socket event\n");
+                        Event event = {Event_code::exit, INVALID_SOCKET, 0};
+                        events.push_back(event);
+                        remove_socket_from_select(raw_socket);    
+                        m_dummy_socket.mark_as_closed(); //do not close as it was already closed
+                    }
                     else //client event
                     {                        
                         uint8_t buffer[1024];
                         int peek = raw_socket.recv((char*)buffer, sizeof(buffer), MSG_PEEK);
+
+                        printf("peek: %d\n", peek);
 
                         if (peek < 0)
                         {
@@ -713,8 +744,8 @@ public:
 
                             Event event = {Event_code::client_error, raw_socket, 0};
                             events.push_back(event);
-                            // FD_CLR(raw_socket, &m_socket_set);     
-                            // m_socket_list.remove(raw_socket);    
+
+                            remove_socket_from_select(raw_socket);
                         }
                         else if (peek == 0)
                         {
@@ -722,23 +753,8 @@ public:
 
                             Event event = {Event_code::client_disconnected, raw_socket, 0};
                             events.push_back(event);
-                            FD_CLR(raw_socket.get_native(), &m_socket_set);     
-                            m_socket_list.remove(raw_socket);  
 
-                            #ifndef _WIN32
-                                //if largest has been removed a new one needs to be calculated
-                                if (raw_socket.get_native() == m_largest_fd) 
-                                {
-                                    m_largest_fd = -1;
-                                    for(const auto& fd: m_socket_list)
-                                    {
-                                        if(fd.get_native() > m_largest_fd)
-                                        {
-                                            m_largest_fd = fd.get_native();
-                                        }
-                                    }
-                                }                            
-                            #endif                     
+                            remove_socket_from_select(raw_socket);                   
                         }
                         else
                         {
@@ -775,6 +791,7 @@ public:
 
     bool m_initialized;
     Simple_socket m_socket;
+    Raw_socket m_dummy_socket;
 
     fd_set m_socket_set;
     std::list<Raw_socket> m_socket_list;

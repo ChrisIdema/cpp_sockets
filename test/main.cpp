@@ -22,14 +22,14 @@ struct Server_params
     bool valid;
 };
 
-Raw_socket server_raw;
+Server_socket* server_p=nullptr;
 
 static void server_thread_function(Server_params* params)
 {
     Server_socket server;
     server.init(params->server_ip, params->server_port);
 
-    server_raw = server.get_raw_socket();
+    server_p = &server;
 
     int state = 0;
 
@@ -40,7 +40,7 @@ static void server_thread_function(Server_params* params)
         {
             printf("state: %d, event: %s\n", state, event.to_string().c_str());
 
-            if(event.event_code == Server_socket::Event_code::not_initialized)
+            if(event.event_code == Server_socket::Event_code::exit)
             {
                 goto EXIT;
             }
@@ -109,7 +109,7 @@ static void client_thread_function(Client_params* params)
 
     printf("force closing server socket\n");
     std::this_thread::sleep_for(1000ms);
-    server_raw.close();
+    server_p->exit();
 
     // bool success=false;
 
