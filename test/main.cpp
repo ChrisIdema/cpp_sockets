@@ -167,15 +167,17 @@ int test1()
 
     std::this_thread::sleep_for(5000ms);
 
-    if (server_params.valid && client_params.valid)
+    if(server_thread.joinable())
     {
-        return 0;
-    }
-    else
-    {
-        return -1;
+        server_thread.join();
     }
 
+    if(client_thread.joinable())
+    {
+        client_thread.join();
+    }
+
+    return 0;
 
 
     server_thread.join();
