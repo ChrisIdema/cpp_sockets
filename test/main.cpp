@@ -165,6 +165,19 @@ int test1()
     std::thread server_thread(server_thread_function, &server_params); 
     std::thread client_thread(client_thread_function, &client_params); 
 
+    std::this_thread::sleep_for(5000ms);
+
+    if (server_params.valid && client_params.valid)
+    {
+        return 0;
+    }
+    else
+    {
+        return -1;
+    }
+
+
+
     server_thread.join();
     client_thread.join();
 
