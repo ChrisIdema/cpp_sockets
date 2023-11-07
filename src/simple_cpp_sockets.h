@@ -17,6 +17,7 @@ typedef SSIZE_T ssize_t;
 #include <netdb.h>
 #include <arpa/inet.h> // This contains inet_addr
 #include <unistd.h> // This contains close
+#include <fcntl.h>
 #define INVALID_SOCKET (SOCKET)(~0)
 #define SOCKET_ERROR (-1)
 typedef int SOCKET;
@@ -327,11 +328,18 @@ public:
             else
             {                
                 m_addr.sin_family = AF_INET;
-                int res = bind();
+                /*int res = bind();
                 if (res != SOCKET_ERROR)
                 {
                     res = set_options();  
+                }*/
+                
+                int res = set_options();
+                if (res != SOCKET_ERROR)
+                {
+                    res = bind();  
                 }
+
 
                 //todo process errors
 
@@ -476,6 +484,10 @@ public:
     {
         int res = m_socket.bind((const sockaddr *)&m_addr, sizeof(m_addr));
         printf("bind res: %d\n", res);
+        if (res == SOCKET_ERROR)
+        {
+        	printf("bind error: %d\n",  m_socket.get_last_error());
+       	}
         return res;
     }
 
@@ -551,6 +563,7 @@ public:
         m_socket(Simple_socket(true))
         #ifndef _WIN32
         ,m_largest_fd(-1)
+        ,pfd{-1,-1}
         #endif
     {
         FD_ZERO(&m_socket_set); // clear set
@@ -560,7 +573,11 @@ public:
     {
         //m_socket will be closed automatically
         //close select?
+        #if defined(_WIN32)
         m_dummy_socket.close();
+        #else
+        //close pipe?
+        #endif
     }
 
 
@@ -572,15 +589,46 @@ public:
             m_initialized = m_socket.init(ip_address, port);
             if (m_initialized)
             {    
-                int res = m_socket.listen(number_of_connections+1);//+1 for dummy socket
+                int res = m_socket.listen(number_of_connections+1);//+1 for dummy socket or pipe
                 //todo proces res
 
                 add_socket_to_select(m_socket.get_raw_socket());
 
+                #if defined(_WIN32)
                 m_dummy_socket = Raw_socket(AF_INET, SOCK_STREAM, 0);
                 printf("dummy socket: ");
                 m_dummy_socket.print();
                 add_socket_to_select(m_dummy_socket);
+                #else
+                res = pipe(pfd);
+                printf("pipe(pfd): %d\n", res);
+                add_socket_to_select(pfd[0]);
+
+                /* Make read and write ends of pipe nonblocking */
+                int flags;
+                flags = fcntl(pfd[0], F_GETFL);
+                if (flags == -1)
+                {
+                    printf("F_GETFL error\n");
+                }
+                    
+                flags |= O_NONBLOCK;                /* Make read end nonblocking */
+                if (fcntl(pfd[0], F_SETFL, flags) == -1)
+                {
+                    printf("F_SETFL error\n");
+                }
+
+                flags = fcntl(pfd[1], F_GETFL);
+                if (flags == -1)
+                {    
+                    printf("F_GETFL error\n");
+                }
+                flags |= O_NONBLOCK;                /* Make write end nonblocking */
+                if (fcntl(pfd[1], F_SETFL, flags) == -1)
+                {
+                    printf("F_SETFL error\n");
+                }
+                #endif
             }
         }
     }
@@ -646,8 +694,14 @@ public:
 
     void exit()
     {
+        #if defined(_WIN32)
         auto m_dummy_socket_copy = m_dummy_socket;        
         m_dummy_socket_copy.close();        
+        #else
+        printf("writing exit\n");
+        int res = write(pfd[1], "x", 1);
+        printf("write(): %d\n", res);
+        #endif
     }
 
     std::vector<Event> wait_for_events()
@@ -723,14 +777,37 @@ public:
                             events.push_back(event);
                         }
                     }
+                    #if defined(_WIN32)
                     else if (raw_socket == m_dummy_socket) //exit event
                     {
                         printf("m_dummy_socket event\n");
+
+                        // uint8_t buffer[1024];
+                        // int peek = raw_socket.recv((char*)buffer, sizeof(buffer), MSG_PEEK);
+
+                        // printf("peek: %d\n", peek);
+
                         Event event = {Event_code::exit, INVALID_SOCKET, 0};
                         events.push_back(event);
                         remove_socket_from_select(raw_socket);    
                         m_dummy_socket.mark_as_closed(); //do not close as it was already closed
                     }
+                    #else
+
+                    else if (raw_socket == pfd[0]) //exit event
+                    {
+                        printf("self pipe event\n");
+
+                        char buffer[10+1]="";
+                        read(pfd[0],buffer, sizeof(buffer)-1);
+                        printf("received: %s\n", buffer);
+
+                        Event event = {Event_code::exit, INVALID_SOCKET, 0};
+                        events.push_back(event);
+                        remove_socket_from_select(raw_socket);    
+                    }
+                    
+                    #endif
                     else //client event
                     {                        
                         uint8_t buffer[1024];
@@ -791,7 +868,11 @@ public:
 
     bool m_initialized;
     Simple_socket m_socket;
+    #if defined(_WIN32)
     Raw_socket m_dummy_socket;
+    #else
+    int pfd[2]; //both ends of pipe: {read,write}
+    #endif
 
     fd_set m_socket_set;
     std::list<Raw_socket> m_socket_list;
