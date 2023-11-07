@@ -19,6 +19,7 @@ struct Server_params
 {
     std::string server_ip;
     uint16_t server_port;
+    
     bool exit_test;
 
     bool valid;
@@ -28,6 +29,8 @@ Server_socket* server_p=nullptr;
 
 static void server_thread_function(Server_params* params)
 {
+    std::this_thread::sleep_for(500ms);//delay so connecting client too early is tested
+
     Server_socket server;
     server.init(params->server_ip, params->server_port);
 
@@ -136,43 +139,64 @@ static void client_thread_function(Client_params* params)
     {
         Simple_socket client_socket(false);
 
-        bool success=false;
+	bool retry;
+	do{
+		bool success=false;
+		retry=false;		
 
-        while(!success)
-        {
-            success = client_socket.init(params->server_ip.c_str(),params->server_port);
-            if(!success)
-            {
-                std::this_thread::sleep_for(50ms);
-            }
-        }
+		while(!success)
+		{
+		    success = client_socket.init(params->server_ip.c_str(),params->server_port);
+		    if(!success)
+		    {
+		    	printf("client_socket.init==false\n");
+		        std::this_thread::sleep_for(100ms);
+		    }
+		}
 
 
-        if (success)
-        {
-            client_socket.send("1",1);
-            
-            int numbytes;  
-            char buf[10]="";
+		if (success)
+		{
+		    client_socket.send("1",1);
+		    
+		    int numbytes;  
+		    char buf[10]="";
 
-            numbytes = client_socket.recv(buf, sizeof(buf)-1);
-            if (numbytes == -1) 
-            {
-                perror("recv");
-                return;
-            }
-            else
-            {
-                buf[numbytes] = '\0';
-            }
+		    numbytes = client_socket.recv(buf, sizeof(buf)-1);
+		    if (numbytes == -1) //error
+		    {
+		        perror("recv");
+		        //return;
+		        retry = true;
+		        client_socket.close();	
+		        std::this_thread::sleep_for(100ms);// not needed, but reduces number of init calls
+		        continue;
+		        	        
+		    }
+		    else if(numbytes == 0) // closed
+		    {
+    		    perror("recv");
+		        //return;
+		        retry = true;
+		        client_socket.close();	
+		        std::this_thread::sleep_for(100ms);// not needed, but reduces number of init calls
+		        continue;
+		    }
+		    else
+		    {
+		        buf[numbytes] = '\0';
+		        printf("client: received(%d) '%s'\n",numbytes, buf);  
+		    }
+		
+		    if ((numbytes == 1) && (buf[0] == '2'))
+		    {
+		        params->valid = true;
+		        break;     
+		    }	    
+		    
+		}
+        }while(retry);
         
-            if ((numbytes == 1) && (buf[0] == '2'))
-            {
-                params->valid = true;     
-            }
-    
-            printf("client: received '%s'\n",buf);       
-        }
     }
 
 
@@ -235,7 +259,9 @@ int main()
 {
     Simple_socket_library simple;
 
-    int res = test1();
+    int res;
+    
+    res = test1();
 
     if (res != 0)
     {
@@ -246,6 +272,7 @@ int main()
     {
         printf(GREEN "[SUCCESS]" NC ": test1() succeeded!\n");
     }
+    
 
     res = test2();
 
