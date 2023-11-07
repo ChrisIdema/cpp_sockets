@@ -159,6 +159,11 @@ class Raw_socket
         return res;
     }
 
+    void mark_as_closed()
+    {
+        m_socket = INVALID_SOCKET;
+    }
+
     int bind(const struct sockaddr* name, int namelen)
     {
         int res = ::bind(m_socket, name, namelen);
@@ -320,12 +325,17 @@ public:
                 //printf("WSAGetLastError(): %d\n",WSAGetLastError());
             }
             else
-            {
-                m_initialized = true;
+            {                
                 m_addr.sin_family = AF_INET;
                 int res = bind();
-                res = set_options();  
+                if (res != SOCKET_ERROR)
+                {
+                    res = set_options();  
+                }
+
                 //todo process errors
+
+                m_initialized = res != SOCKET_ERROR;
             }
         }
         else
@@ -440,6 +450,8 @@ public:
         if (m_initialized)
         {
             m_socket.close();
+            m_initialized = false;
+            m_address_valid = false;
         }
     }
 
@@ -602,25 +614,43 @@ public:
 
         if (m_initialized)
         {
-            fd_set event_socket_set = m_socket_set; //select modifies set, so make a copy
+            fd_set event_read_set = m_socket_set; //select modifies set, so make a copy
             
             #if defined(_WIN32)
-                int res = select(0, &event_socket_set, NULL, NULL, NULL);
+                int res = select(0, &event_read_set, NULL, NULL, NULL);
             #else
-                int res = select(m_largest_fd+1, &event_socket_set, NULL, NULL, NULL);
+                int res = select(m_largest_fd+1, &event_read_set, NULL, NULL, NULL);
             #endif
 
             printf("select res: %d\n",res);
+            if(res == SOCKET_ERROR)
+            {
+                int error = m_socket.get_raw_socket().get_last_error();
+                printf("select error: %d\n", error);
+
+                if(error == 10038)
+                {
+                    printf("WSAENOTSOCK\n");
+                    m_socket.get_raw_socket().mark_as_closed();
+                    m_socket.close();
+
+                    Event event= {Event_code::not_initialized};
+                    events.push_back(event);
+                    return events;
+                }
+                
+            }
 
             auto m_socket_list_copy = m_socket_list;
             for(const auto& raw_socket: m_socket_list_copy)
             {
                 printf("checking events for: ");
                 raw_socket.print();
+
                 
-                if (FD_ISSET(raw_socket.get_native(), &event_socket_set)) //new event 
+                if (FD_ISSET(raw_socket.get_native(), &event_read_set)) //new event 
                 { 
-                    printf("Event for socket: ");
+                    printf("read event for socket: ");
                     raw_socket.print();
 
                     if (raw_socket == m_socket.get_raw_socket()) //server event
@@ -628,12 +658,24 @@ public:
                         struct sockaddr_storage remoteaddr; // client address                   
                         socklen_t addrlen = sizeof(remoteaddr);    
 
-                        //printf("server_event\n");
+                        printf("server_event\n");
                         Raw_socket new_socket = m_socket.get_raw_socket().accept((struct sockaddr *)&remoteaddr, &addrlen);
 
                         if (!new_socket.valid())
                         {
-                            //printf("accept failed: %d\n", new_socket.get_last_error());
+                            int error = m_socket.get_raw_socket().get_last_error();
+                            printf("accept failed error: %d\n", error);
+
+                            if(error == 10038)
+                            {
+                                printf("WSAENOTSOCK\n");
+                                m_socket.get_raw_socket().mark_as_closed();
+                                m_socket.close();
+
+                                Event event= {Event_code::not_initialized};
+                                events.push_back(event);
+                                return events;
+                            }
                         } 
                         else 
                         {
@@ -720,6 +762,11 @@ public:
         std::list<Raw_socket> client_list = m_socket_list;
         client_list.remove(m_socket.get_raw_socket());
         return m_socket_list;
+    }
+
+    Raw_socket get_raw_socket() const
+    {
+        return m_socket.get_raw_socket();
     }
 
     private:
