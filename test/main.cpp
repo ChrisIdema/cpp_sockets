@@ -123,7 +123,7 @@ static void client_thread_function(Client_params* params)
         std::this_thread::sleep_for(1000ms);
         if (server_p != nullptr)
         {
-            printf("server_p->exit()d\n");
+            printf("server_p->exit()\n");
             server_p->exit();
             params->valid = true;
         }
