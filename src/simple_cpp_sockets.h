@@ -596,13 +596,24 @@ public:
     ~Server_socket()
     {
         //m_socket will be closed automatically
-        //close select?
+        
+        //close dummysocket/pipe:
         #if defined(_WIN32)
+        remove_socket_from_select(m_dummy_socket);
         m_dummy_socket.close();
         #else
+        remove_socket_from_select(pfd[0]);
         close(pfd[0]);
         close(pfd[1]);
         #endif
+
+        //close remaining raw sockets:
+        for(auto& fd: m_socket_list)
+        {
+            fd.close();
+        }
+
+        m_socket_list.clear();
     }
 
     bool is_initialized() const{return m_initialized;}
