@@ -580,8 +580,12 @@ public:
     Server_socket()
         : 
         m_initialized(false),
-        m_socket(Simple_socket(true))
-        #ifndef _WIN32
+        m_socket(Simple_socket(true)),
+        m_socket_set({0}),
+        m_socket_list()
+        #ifdef _WIN32
+        ,m_dummy_socket(INVALID_SOCKET)
+        #else
         ,m_largest_fd(-1)
         ,pfd{-1,-1}
         #endif
@@ -934,15 +938,14 @@ public:
 
     bool m_initialized;
     Simple_socket m_socket;
-    #if defined(_WIN32)
-    Raw_socket m_dummy_socket;
-    #else
-    int pfd[2]; //both ends of pipe: {read,write}
-    #endif
 
     fd_set m_socket_set;
     std::list<Raw_socket> m_socket_list;
-    #ifndef _WIN32
+
+    #ifdef _WIN32
+    Raw_socket m_dummy_socket;
+    #else
     int m_largest_fd;
+    int pfd[2]; //both ends of pipe: {read,write}
     #endif
 };
