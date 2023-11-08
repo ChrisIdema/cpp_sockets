@@ -595,7 +595,8 @@ public:
 
     ~Server_socket()
     {
-        //m_socket will be closed automatically
+        //m_socket will be closed automatically, but remove from list to prevent double close
+        remove_socket_from_select(m_socket.get_raw_socket());
         
         //close dummysocket/pipe:
         #if defined(_WIN32)
@@ -607,7 +608,7 @@ public:
         close(pfd[1]);
         #endif
 
-        //close remaining raw sockets:
+        //close remaining raw sockets (clients):
         for(auto& fd: m_socket_list)
         {
             fd.close();
