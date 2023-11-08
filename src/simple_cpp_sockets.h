@@ -601,8 +601,9 @@ public:
         #endif
     }
 
+    bool is_initialized() const{return m_initialized;}
 
-    void init(std::string ip_address, uint16_t port, uint8_t number_of_connections=10)
+    bool init(std::string ip_address, uint16_t port, uint8_t number_of_connections=10)
     {
         if(!m_initialized)
         {        
@@ -662,6 +663,7 @@ public:
                 }
             }
         }
+        return m_initialized;
     }
 
     void add_socket_to_select(Raw_socket socket)
@@ -708,6 +710,38 @@ public:
         exit,    
     };
 
+    static std::string Event_code_to_string(Event_code e)
+    {
+        std::string s = "";
+
+        switch(e)
+        {
+            case Event_code::no_event:
+            s = "no_event";
+            break;
+            case Event_code::not_initialized:
+            s = "not_initialized";
+            break;
+            case Event_code::client_connected:
+            s = "client_connected";
+            break;
+            case Event_code::client_disconnected:
+            s = "client_disconnected";
+            break;
+            case Event_code::client_error:
+            s = "client_error";
+            break;
+            case Event_code::rx:    
+            s = "rx";       
+            break;
+            case Event_code::exit:
+            s = "exit";
+            break;
+        }
+
+        return s;
+    }
+
     
 
     struct Event
@@ -717,7 +751,8 @@ public:
         int bytes_available;      
         std::string to_string() const
         {
-            std::string s = "0";
+            //std::string s = "0";
+            auto s = Event_code_to_string(event_code);
             s[0] += int(event_code);
             return s;
         }  
