@@ -261,7 +261,7 @@ public:
     Simple_socket(bool server=false)
         : 
         m_socket(INVALID_SOCKET),
-        m_addr({0}),
+        m_addr(),
         m_server_ip(""),
         m_server_port(0),
         m_address_valid(false),
@@ -273,7 +273,7 @@ public:
     Simple_socket(bool server, std::string ip_address, uint16_t port)
         : 
         m_socket(INVALID_SOCKET),
-        m_addr({0}),
+        m_addr(),
         m_server_ip(ip_address),
         m_server_port(port),
         m_address_valid(false),
@@ -361,7 +361,7 @@ public:
             return m_initialized;
         }
 
-        struct addrinfo hints={0};
+        struct addrinfo hints={};
         struct addrinfo *servinfo=nullptr;
         int res;
 
@@ -839,7 +839,7 @@ public:
                             m_socket.get_raw_socket().mark_as_closed();
                             m_socket.close();
 
-                            Event event= {Event_code::not_initialized};
+                            Event event= {Event_code::not_initialized, INVALID_SOCKET, 0};
                             events.push_back(event);
                             return events;
                             
@@ -927,7 +927,7 @@ public:
 
         }
         else{
-            Event event= {Event_code::not_initialized};
+            Event event= {Event_code::not_initialized, INVALID_SOCKET, 0};
             events.push_back(event);
         }
 
