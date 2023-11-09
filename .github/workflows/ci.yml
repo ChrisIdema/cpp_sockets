@@ -4,6 +4,7 @@ on:
     branches:
       - master
       - develop
+      - refactor_client
   pull_request:
     branches:
       - master
@@ -11,23 +12,25 @@ on:
 jobs:
   build-and-test-windows:
     runs-on: windows-latest
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Build on Windows
-        run: cl main.cpp simple_cpp_sockets.cpp /EHsc
-        working-directory: ./src
+        run: cl test/main.cpp -Isrc /EHsc /std:c++17
+        working-directory: .
       - name: test on Windows
         run: ./main.exe
-        working-directory: ./src     
+        working-directory: . 
   build-and-test-linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
       - uses: actions/checkout@v4
       - name: Build on Linux
-        run: g++ main.cpp -o main
-        working-directory: ./src
+        run: g++ -std=c++17 -Wall test/main.cpp -o main -Isrc 
+        working-directory: .
       - name: test on Linux
         run: ./main
-        working-directory: ./src
+        working-directory: .
 
