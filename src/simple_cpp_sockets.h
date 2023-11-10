@@ -623,7 +623,12 @@ public:
 
     ~Server_socket()
     {
-        //m_socket will be closed automatically, but remove from list to prevent double close
+        deinit();
+    }
+
+    void deinit()
+    {
+        // remove from list to prevent double close
         remove_socket_from_select(m_socket.get_raw_socket());
         
         //close dummysocket/pipe:
@@ -643,6 +648,8 @@ public:
         }
 
         m_socket_list.clear();
+        m_socket.close();
+        m_initialized = false;
     }
 
     bool is_initialized() const{return m_initialized;}
@@ -796,7 +803,7 @@ public:
         Event_code event_code;
         Raw_socket client;
         int bytes_available;
-        void* message;      
+        const void* message;      
         std::string to_string() const
         {
             std::string s = "(0)";
@@ -811,19 +818,23 @@ public:
         custom_message(nullptr);
     }
 
-    void custom_message(void* message)
+    void custom_message(const void* message)
     {
         std::lock_guard<std::mutex> guard(m_message_mutex);
 
+        PRINT("adding message\n");
+
         if (m_messages.size() == 0) // only trigger server once per batch
         {
+            
             #if defined(_WIN32)
+            PRINT("closing dummy socket copy\n");
             auto m_dummy_socket_copy = m_dummy_socket;        
             m_dummy_socket_copy.close();     
             #else
-            PRINT("writing exit\n");
+            PRINT("write data to pipe\n");
             int res = write(pfd[1], "x", 1);
-            PRINT("write(): %d\n", res);
+            PRINT("write rs: %d\n", res);
             #endif
         }
 
@@ -888,18 +899,19 @@ public:
                     {
                         if (message == nullptr)
                         {
-                            PRINT("adding exit message\n");
+                            PRINT("received exit message\n");
                             Event event = {Event_code::exit, INVALID_SOCKET, 0};
                             events.push_back(event);
                         }
                         else
                         {
-                            PRINT("adding custom message\n");
+                            PRINT("received custom message\n");
                             Event event = {Event_code::interrupt, INVALID_SOCKET, 0, message};
                             events.push_back(event);  
                         }
                     }
                     m_messages.clear();
+                    return events;
                 }
             }
 
@@ -921,6 +933,8 @@ public:
 
                         PRINT("server_event\n");
                         Raw_socket new_socket = m_socket.get_raw_socket().accept((struct sockaddr *)&remoteaddr, &addrlen);
+
+                        new_socket.print();
 
                         if (!new_socket.valid())
                         {
@@ -1031,7 +1045,7 @@ public:
     fd_set m_socket_set;
     std::list<Raw_socket> m_socket_list;
 
-    std::vector<void*> m_messages;
+    std::vector<const void*> m_messages;
     std::mutex m_message_mutex;
 
     #ifdef _WIN32
