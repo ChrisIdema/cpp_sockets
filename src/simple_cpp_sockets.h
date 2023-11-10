@@ -822,23 +822,26 @@ public:
     {
         std::lock_guard<std::mutex> guard(m_message_mutex);
 
-        PRINT("adding message\n");
-
-        if (m_messages.size() == 0) // only trigger server once per batch
+        if (m_initialized)
         {
-            
-            #if defined(_WIN32)
-            PRINT("closing dummy socket copy\n");
-            auto m_dummy_socket_copy = m_dummy_socket;        
-            m_dummy_socket_copy.close();     
-            #else
-            PRINT("write data to pipe\n");
-            int res = write(pfd[1], "x", 1);
-            PRINT("write rs: %d\n", res);
-            #endif
-        }
+            PRINT("adding message\n");
 
-        m_messages.push_back(message);
+            if (m_messages.size() == 0) // only trigger server once per batch
+            {
+                
+                #if defined(_WIN32)
+                PRINT("closing dummy socket copy\n");
+                auto m_dummy_socket_copy = m_dummy_socket;        
+                m_dummy_socket_copy.close();     
+                #else
+                PRINT("write data to pipe\n");
+                int res = write(pfd[1], "x", 1);
+                PRINT("write rs: %d\n", res);
+                #endif
+            }
+
+            m_messages.push_back(message);
+        }
     }
 
     std::vector<Event> wait_for_events()
