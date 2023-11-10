@@ -25,13 +25,13 @@ struct Server_params
     bool valid;
 };
 
-Server_socket* server_p=nullptr;
+Socket_waiter* server_p=nullptr;
 
 static void server_thread_function(Server_params* params)
 {
     std::this_thread::sleep_for(500ms);//delay so connecting client too early is tested
 
-    Server_socket server;
+    Socket_waiter server;
     server.init(params->server_ip, params->server_port);
 
     if(params->exit_test)
@@ -41,7 +41,7 @@ static void server_thread_function(Server_params* params)
         auto events = server.wait_for_events();
         for(const auto& event: events)
         {
-            if(event.event_code == Server_socket::Event_code::exit)
+            if(event.event_code == Socket_waiter::Event_code::exit)
             {
                 params->valid = true;
             }
@@ -66,7 +66,7 @@ static void server_thread_function(Server_params* params)
                 switch(state)
                 {
                     case 0:
-                        if(event.event_code == Server_socket::Event_code::client_connected)
+                        if(event.event_code == Socket_waiter::Event_code::client_connected)
                         {
                             state = 1;
                         }
@@ -76,7 +76,7 @@ static void server_thread_function(Server_params* params)
                         }
                     break;
                     case 1:
-                        if(event.event_code == Server_socket::Event_code::rx)
+                        if(event.event_code == Socket_waiter::Event_code::rx)
                         {
                             state = 4;
                             if(event.bytes_available==1)
@@ -96,7 +96,7 @@ static void server_thread_function(Server_params* params)
                         }
                     break;
                     case 2:
-                        if(event.event_code == Server_socket::Event_code::client_disconnected)
+                        if(event.event_code == Socket_waiter::Event_code::client_disconnected)
                         {
                             state = 3;
                         }
@@ -258,13 +258,13 @@ int test2()
 
 int test3()
 {
-    Server_socket server;
+    Socket_waiter server;
     server.init("127.0.0.1", 60000);
 
     const std::vector<const char*> to_server={"Hello world!", "Hello again!", "Bye!"};
     std::vector<const char*> received_by_server;
 
-    std::thread server_thread([](Server_socket* p_server, std::vector<const char*>* p_received_by_server){
+    std::thread server_thread([](Socket_waiter* p_server, std::vector<const char*>* p_received_by_server){
         bool running = true;
 
         while(running)
@@ -274,12 +274,12 @@ int test3()
             for(const auto& event: events)
             {
                 PRINT("event: %s\n", event.to_string().c_str());  
-                if(event.event_code == Server_socket::Event_code::exit)
+                if(event.event_code == Socket_waiter::Event_code::exit)
                 {
                     running = false;
                     break;
                 }
-                if(event.event_code == Server_socket::Event_code::interrupt)            
+                if(event.event_code == Socket_waiter::Event_code::interrupt)            
                 {     
                     auto message = reinterpret_cast<const char*>(event.message);                    
                     PRINT("message: \"%s\"\n", message);        

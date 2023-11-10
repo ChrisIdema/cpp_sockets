@@ -600,13 +600,14 @@ private:
 
 
 
-class Server_socket
+class Socket_waiter
 {
 public:
-    Server_socket()
+    Socket_waiter(bool server)
         : 
+        m_server(server),
         m_initialized(false),
-        m_socket(Simple_socket(true)),
+        m_socket(Simple_socket(server)),
         m_socket_set({0}),
         m_socket_list(),
         m_messages(),
@@ -621,7 +622,7 @@ public:
         FD_ZERO(&m_socket_set); // clear set
     }
 
-    ~Server_socket()
+    ~Socket_waiter()
     {
         deinit();
     }
@@ -662,12 +663,15 @@ public:
             bool valid = m_socket.init(ip_address, port);
             if (valid)
             {    
-                int res = m_socket.listen(number_of_connections+1);//+1 for dummy socket or pipe
-                
+                int res = 0;
+                if (m_server)
+                {
+                    res = m_socket.listen(number_of_connections+1);//+1 for dummy socket or pipe
+                }
+
                 if (res != SOCKET_ERROR)
                 {
-                    add_socket_to_select(m_socket.get_raw_socket());
-                
+                    add_socket_to_select(m_socket.get_raw_socket());                
 
                     #if defined(_WIN32)
                     m_dummy_socket = Raw_socket(AF_INET, SOCK_STREAM, 0);
@@ -827,8 +831,7 @@ public:
             PRINT("adding message\n");
 
             if (m_messages.size() == 0) // only trigger server once per batch
-            {
-                
+            {                
                 #if defined(_WIN32)
                 PRINT("closing dummy socket copy\n");
                 auto m_dummy_socket_copy = m_dummy_socket;        
@@ -929,7 +932,7 @@ public:
                     PRINT("read event for socket: ");
                     raw_socket.print();
 
-                    if (raw_socket == m_socket.get_raw_socket()) //server event
+                    if (m_server && raw_socket == m_socket.get_raw_socket()) //server event
                     {                    
                         struct sockaddr_storage remoteaddr; // client address                   
                         socklen_t addrlen = sizeof(remoteaddr);    
@@ -978,7 +981,6 @@ public:
                         PRINT("m_dummy_socket event\n");                   
                     }
                     #else
-
                     else if (raw_socket == pfd[0]) //interrupt event
                     {                        
                         PRINT("self pipe event\n");                    
@@ -999,15 +1001,32 @@ public:
                             events.push_back(event);
 
                             remove_socket_from_select(raw_socket);
+
+                            if(!m_server)
+                            {
+                                m_socket.close();
+                                m_initialized = false;
+                            }
                         }
                         else if (peek == 0)
                         {
                             //close
 
-                            Event event = {Event_code::client_disconnected, raw_socket, 0};
-                            events.push_back(event);
+                            Event event;
+                            if(m_server)
+                            {
+                                event = {Event_code::client_disconnected, raw_socket, 0};
+                                remove_socket_from_select(raw_socket);   
+                            }
+                            else
+                            {                                                        
+                                event = {Event_code::client_disconnected, raw_socket, 0}; // server disconnected?
+                                remove_socket_from_select(raw_socket);     
+                                m_socket.close();
+                                m_initialized = false; 
+                            }  
 
-                            remove_socket_from_select(raw_socket);                   
+                            events.push_back(event);              
                         }
                         else
                         {
@@ -1018,9 +1037,9 @@ public:
                     }
                 }
             }
-
         }
-        else{
+        else
+        {
             Event event= {Event_code::not_initialized, INVALID_SOCKET, 0};
             events.push_back(event);
         }
@@ -1032,7 +1051,14 @@ public:
     {
         std::list<Raw_socket> client_list = m_socket_list;
         client_list.remove(m_socket.get_raw_socket());
-        return m_socket_list;
+        
+        #if defined(_WIN32)
+        client_list.remove(m_dummy_socket);
+        #else
+        client_list.remove(pfd[0]);
+        #endif
+
+        return client_list;
     }
 
     Raw_socket get_raw_socket() const
@@ -1042,6 +1068,7 @@ public:
 
     private:
 
+    bool m_server;
     bool m_initialized;
     Simple_socket m_socket;
 
