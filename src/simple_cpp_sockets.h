@@ -609,7 +609,8 @@ public:
         m_socket(Simple_socket(true)),
         m_socket_set({0}),
         m_socket_list(),
-        m_message(nullptr)
+        m_messages(),
+        m_message_mutex()
         #ifdef _WIN32
         ,m_dummy_socket(INVALID_SOCKET)
         #else
@@ -794,7 +795,8 @@ public:
     {
         Event_code event_code;
         Raw_socket client;
-        int bytes_available;      
+        int bytes_available;
+        void* message;      
         std::string to_string() const
         {
             std::string s = "(0)";
@@ -806,26 +808,26 @@ public:
 
     void exit_message()
     {
-        #if defined(_WIN32)
-        auto m_dummy_socket_copy = m_dummy_socket;        
-        m_dummy_socket_copy.close();        
-        #else
-        PRINT("writing exit\n");
-        int res = write(pfd[1], "x", 1);
-        PRINT("write(): %d\n", res);
-        #endif
+        custom_message(nullptr);
     }
 
     void custom_message(void* message)
     {
-        #if defined(_WIN32)
-        auto m_dummy_socket_copy = m_dummy_socket;        
-        m_dummy_socket_copy.close();        
-        #else
-        PRINT("writing exit\n");
-        int res = write(pfd[1], "x", 1);
-        PRINT("write(): %d\n", res);
-        #endif
+        std::lock_guard<std::mutex> guard(m_message_mutex);
+
+        if (m_messages.size() == 0) // only trigger server once per batch
+        {
+            #if defined(_WIN32)
+            auto m_dummy_socket_copy = m_dummy_socket;        
+            m_dummy_socket_copy.close();     
+            #else
+            PRINT("writing exit\n");
+            int res = write(pfd[1], "x", 1);
+            PRINT("write(): %d\n", res);
+            #endif
+        }
+
+        m_messages.push_back(message);
     }
 
     std::vector<Event> wait_for_events()
@@ -833,9 +835,10 @@ public:
         std::vector<Event> events;
 
         if (m_initialized)
-        {
+        {           
             fd_set event_read_set = m_socket_set; //select modifies set, so make a copy
-            
+
+            PRINT("select\n");
             #if defined(_WIN32)
                 int res = select(0, &event_read_set, NULL, NULL, NULL);
             #else
@@ -846,7 +849,58 @@ public:
             if(res == SOCKET_ERROR)
             {
                 int error = m_socket.get_raw_socket().get_last_error();
-                PRINT("select error: %d\n", error);            
+                PRINT("select error: %d\n", error);   
+
+                //closing dummy socket before select causes error     
+
+                #if defined(_WIN32)
+                    if(error == 10038) // WSAENOTSOCK. select was called with a closed dummy socket
+                    {
+                        PRINT("WSAENOTSOCK (dummy socket probably closed before select()\n");
+                    }                    
+                #endif
+            }
+
+            {
+                std::lock_guard<std::mutex> guard(m_message_mutex);
+                if (m_messages.size() != 0) 
+                {                
+                    #if defined(_WIN32)
+                    PRINT("m_dummy_socket event\n");
+
+                    //remove dummy socket:
+                    remove_socket_from_select(m_dummy_socket);    
+                    m_dummy_socket.mark_as_closed(); //do not close as it was already closed
+
+                    //add dummy socket back:
+                    m_dummy_socket = Raw_socket(AF_INET, SOCK_STREAM, 0);
+                    PRINT("dummy socket: ");
+                    m_dummy_socket.print();
+                    add_socket_to_select(m_dummy_socket);     
+                    #else                     
+                    PRINT("self pipe event\n");
+                    char buffer[1+1]="";
+                    ::read(pfd[0],buffer, sizeof(buffer)-1);
+                    PRINT("received: %s\n", buffer);                      
+                    #endif
+
+                    for(const auto& message: m_messages)
+                    {
+                        if (message == nullptr)
+                        {
+                            PRINT("adding exit message\n");
+                            Event event = {Event_code::exit, INVALID_SOCKET, 0};
+                            events.push_back(event);
+                        }
+                        else
+                        {
+                            PRINT("adding custom message\n");
+                            Event event = {Event_code::interrupt, INVALID_SOCKET, 0, message};
+                            events.push_back(event);  
+                        }
+                    }
+                    m_messages.clear();
+                }
             }
 
             auto m_socket_list_copy = m_socket_list;
@@ -902,35 +956,16 @@ public:
                         }
                     }
                     #if defined(_WIN32)
-                    else if (raw_socket == m_dummy_socket) //exit event
+                    else if (raw_socket == m_dummy_socket) //interrupt event
                     {
-                        PRINT("m_dummy_socket event\n");
-
-                        // uint8_t buffer[1024];
-                        // int peek = raw_socket.recv((char*)buffer, sizeof(buffer), MSG_PEEK);
-
-                        // PRINT("peek: %d\n", peek);
-
-                        Event event = {Event_code::exit, INVALID_SOCKET, 0};
-                        events.push_back(event);
-                        remove_socket_from_select(raw_socket);    
-                        m_dummy_socket.mark_as_closed(); //do not close as it was already closed
+                        PRINT("m_dummy_socket event\n");                   
                     }
                     #else
 
-                    else if (raw_socket == pfd[0]) //exit event
-                    {
-                        PRINT("self pipe event\n");
-
-                        char buffer[10+1]="";
-                        read(pfd[0],buffer, sizeof(buffer)-1);
-                        PRINT("received: %s\n", buffer);
-
-                        Event event = {Event_code::exit, INVALID_SOCKET, 0};
-                        events.push_back(event);
-                        remove_socket_from_select(raw_socket);    
-                    }
-                    
+                    else if (raw_socket == pfd[0]) //interrupt event
+                    {                        
+                        PRINT("self pipe event\n");                    
+                    }                    
                     #endif
                     else //client event
                     {                        
@@ -996,7 +1031,9 @@ public:
     fd_set m_socket_set;
     std::list<Raw_socket> m_socket_list;
 
-    void* m_message;
+    std::vector<void*> m_messages;
+    std::mutex m_message_mutex;
+
     #ifdef _WIN32
     Raw_socket m_dummy_socket;
     #else

@@ -15,11 +15,11 @@ I reimplemented the library to be event-based using select(). This allows the se
 
 ## Build
 - To build and run the test application on Linux open a terminal and run:
-    - `g++ -std=c++17 test/main.cpp -o main -Isrc`
+    - `g++ -std=c++17 test/main.cpp -o main -Isrc -DSIMPLE_CPP_SOCKETS_PRINT`
     - `./main`
 
 - To build and run the test application on Windows either use Visual Studio directly or open the `Developer Command Prompt` and run:
-    - `cl test/main.cpp -Isrc /EHsc /std:c++17`
+    - `cl test/main.cpp -Isrc /EHsc /std:c++17 -DSIMPLE_CPP_SOCKETS_PRINT`
     - `start main.exe`
 
 

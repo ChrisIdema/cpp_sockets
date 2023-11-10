@@ -46,7 +46,7 @@ static void server_thread_function(Server_params* params)
                 params->valid = true;
             }
             else
-            {
+            {                
                 params->valid = false;
                 break;
             }            
@@ -61,15 +61,7 @@ static void server_thread_function(Server_params* params)
             auto events = server.wait_for_events();
             for(const auto& event: events)
             {
-                auto s = event.to_string();
-                PRINT("state: %d, event: %s\n", state, s.c_str());
-                PRINT("state: %d, event: %s\n", state, s.c_str());                
-                PRINT("state: %d, event: %s\n", state, s.c_str());
-
-                Server_socket::Event e = {Server_socket::Event_code::client_connected};
-                PRINT("state: %d, event: %s\n", state, e.to_string().c_str());
-                PRINT("state: %d, event: %s\n", state, e.to_string().c_str());
-                PRINT("state: %d, event: %s\n", state, e.to_string().c_str());
+                PRINT("state: %d, event: %s\n", state, event.to_string().c_str());  
 
                 switch(state)
                 {
@@ -247,6 +239,7 @@ int test2()
 
     std::thread server_thread(server_thread_function, &server_params); 
     std::thread client_thread(client_thread_function, &client_params); 
+    
 
     server_thread.join();
     client_thread.join();
@@ -263,36 +256,99 @@ int test2()
     }
 }
 
+int test3()
+{
+    Server_socket server;
+    server.init("127.0.0.1", 60000);
+
+    const std::vector<const char*> to_server={"Hello world!", "Hello again!", "Bye!"};
+    std::vector<const char*> received_by_server;
+
+    std::thread server_thread([](Server_socket* p_server, std::vector<const char*>* p_received_by_server){
+        bool running = true;
+
+        while(running)
+        {
+            auto events = p_server->wait_for_events();
+            for(const auto& event: events)
+            {
+                PRINT("event: %s\n", event.to_string().c_str());  
+                if(event.event_code == Server_socket::Event_code::exit)
+                {
+                    running = false;
+                    break;
+                }
+                if(event.event_code == Server_socket::Event_code::interrupt)            
+                {     
+                    auto message = reinterpret_cast<const char*>(event.message);                    
+                    PRINT("message: \"%s\"\n", message);        
+                    p_received_by_server->push_back(message);        
+                }            
+            }
+        }
+    }, &server, &received_by_server);
+
+    std::this_thread::sleep_for(100ms);
+    server.custom_message("Hello world!");
+    server.custom_message("Hello again!");
+    server.custom_message("Bye!");
+    std::this_thread::sleep_for(100ms);
+    server.exit_message();
+    server_thread.join();
+
+    for(const auto& message: received_by_server)
+    {
+        PRINT("message: \"%s\"\n", message);   
+    }
+
+
+    return 0;
+}
+
+
 int main() 
 {
     Simple_socket_library simple;
 
     int res;
     
-    res = test1();
+    // res = test1();
 
-    if (res != 0)
-    {
-        fprintf(stderr, RED "[ERROR]" NC ": test1() failed!\n");
-        return res;// Error: Process completed with exit code 255.
-    }
-    else
-    {
-        printf(GREEN "[SUCCESS]" NC ": test1() succeeded!\n");
-    }
+    // if (res != 0)
+    // {
+    //     fprintf(stderr, RED "[ERROR]" NC ": test1() failed!\n");
+    //     return res;// Error: Process completed with exit code 255.
+    // }
+    // else
+    // {
+    //     printf(GREEN "[SUCCESS]" NC ": test1() succeeded!\n");
+    // }
     
 
-    res = test2();
+    // res = test2();
+
+    // if (res != 0)
+    // {
+    //     fprintf(stderr, RED "[ERROR]" NC ": test2() failed!\n");
+    //     return res;// Error: Process completed with exit code 255.
+    // }
+    // else
+    // {
+    //     printf(GREEN "[SUCCESS]" NC ": test2() succeeded!\n");
+    // }
+
+    res = test3();
 
     if (res != 0)
     {
-        fprintf(stderr, RED "[ERROR]" NC ": test2() failed!\n");
+        fprintf(stderr, RED "[ERROR]" NC ": test3() failed!\n");
         return res;// Error: Process completed with exit code 255.
     }
     else
     {
-        printf(GREEN "[SUCCESS]" NC ": test2() succeeded!\n");
+        printf(GREEN "[SUCCESS]" NC ": test3() succeeded!\n");
     }
+
 
 
     return 0; 
