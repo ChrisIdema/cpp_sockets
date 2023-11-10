@@ -61,7 +61,15 @@ static void server_thread_function(Server_params* params)
             auto events = server.wait_for_events();
             for(const auto& event: events)
             {
-                printf("state: %d, event: %s\n", state, event.to_string().c_str());
+                auto s = event.to_string();
+                PRINT("state: %d, event: %s\n", state, s.c_str());
+                PRINT("state: %d, event: %s\n", state, s.c_str());                
+                PRINT("state: %d, event: %s\n", state, s.c_str());
+
+                Server_socket::Event e = {Server_socket::Event_code::client_connected};
+                PRINT("state: %d, event: %s\n", state, e.to_string().c_str());
+                PRINT("state: %d, event: %s\n", state, e.to_string().c_str());
+                PRINT("state: %d, event: %s\n", state, e.to_string().c_str());
 
                 switch(state)
                 {
@@ -126,13 +134,13 @@ static void client_thread_function(Client_params* params)
         std::this_thread::sleep_for(1000ms);
         if (server_p != nullptr)
         {
-            printf("server_p->exit()\n");
-            server_p->exit();
+            PRINT("server_p->exit()\n");
+            server_p->exit_message();
             params->valid = true;
         }
         else
         {
-            printf("server pointer NOT assigned\n");
+            PRINT("server pointer NOT assigned\n");
         }
     }
     else
@@ -149,7 +157,7 @@ static void client_thread_function(Client_params* params)
 		    success = client_socket.init(params->server_ip.c_str(),params->server_port);
 		    if(!success)
 		    {
-		    	printf("client_socket.init==false\n");
+		    	PRINT("client_socket.init==false\n");
 		        std::this_thread::sleep_for(100ms);
 		    }
 		}
@@ -185,7 +193,7 @@ static void client_thread_function(Client_params* params)
 		    else
 		    {
 		        buf[numbytes] = '\0';
-		        printf("client: received(%d) '%s'\n",numbytes, buf);  
+		        PRINT("client: received(%d) '%s'\n",numbytes, buf);  
 		    }
 		
 		    if ((numbytes == 1) && (buf[0] == '2'))
@@ -220,7 +228,7 @@ int test1()
     server_thread.join();
     client_thread.join();
 
-    printf("server_params.valid: %d\n", server_params.valid);
+    PRINT("server_params.valid: %d\n", server_params.valid);
 
     if (server_params.valid && client_params.valid)
     {
@@ -243,7 +251,7 @@ int test2()
     server_thread.join();
     client_thread.join();
 
-    printf("server_params.valid: %d\n", server_params.valid);
+    PRINT("server_params.valid: %d\n", server_params.valid);
 
     if (server_params.valid && client_params.valid)
     {

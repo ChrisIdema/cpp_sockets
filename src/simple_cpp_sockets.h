@@ -3,7 +3,6 @@
 #define _WINSOCK_DEPRECATED_NO_WARNINGS
 #include <winsock2.h>
 #include <Ws2tcpip.h>
-#include <mutex>
 
 // Link with ws2_32.lib
 #pragma comment(lib, "ws2_32.lib")
@@ -27,6 +26,27 @@ typedef int SOCKET;
 #include <vector>
 #include <list>
 
+#include <mutex>
+#include <stdarg.h>
+
+
+void my_print(const char * pString, ...)
+{
+    static std::mutex mutex;
+    std::lock_guard<std::mutex> guard(mutex);
+    va_list args;
+    va_start(args, pString);
+    vprintf(pString, args);
+    va_end(args);
+}
+
+
+#ifdef SIMPLE_CPP_SOCKETS_PRINT
+#define PRINT(...) my_print(__VA_ARGS__)
+#else
+#define PRINT(...) 
+#endif
+
 #if defined(_WIN32)
 
 
@@ -40,18 +60,18 @@ class Simple_socket_library
 
         if (res != 0)
         {
-            printf("WSAStartup failed with error: %d\n", res);
+            PRINT("WSAStartup failed with error: %d\n", res);
         }
         else
         {          
             if (LOBYTE(m_wsa.wVersion) != 2 || HIBYTE(m_wsa.wVersion) != 2) 
             {
-                printf("Could not find a usable version of Winsock.dll\n");
+                PRINT("Could not find a usable version of Winsock.dll\n");
                 WSACleanup();
             }
             else
             {
-                printf("WSA initialized\n");
+                PRINT("WSA initialized\n");
                 m_initialized = true;
             }
         }
@@ -65,10 +85,11 @@ class Simple_socket_library
         }
     }
 
+
     private:
     WSADATA m_wsa;
     bool m_initialized;
-    
+   
 };
 
 
@@ -86,6 +107,8 @@ typedef int Simple_socket_library;
 #define SOCKET_FORMAT_STRING "%d"
 
 #endif
+
+
 
 // get sockaddr, IPv4 or IPv6:
 static void *get_in_addr(struct sockaddr *sa)
@@ -180,12 +203,12 @@ class Raw_socket
     void print() const
     {
         if (valid())
-        {            
-            printf(SOCKET_FORMAT_STRING"\n", m_socket);
+        {               
+            PRINT(SOCKET_FORMAT_STRING"\n", m_socket);
         }
         else
         {
-            printf("INVALID_SOCKET\n");
+            PRINT("INVALID_SOCKET\n");
         }
     }
 
@@ -296,7 +319,7 @@ public:
         int res = inet_pton(AF_INET, m_server_ip.c_str(), &m_addr.sin_addr);
         m_addr.sin_port = htons(m_server_port);
         m_address_valid = res != INVALID_SOCKET; 
-        printf("inet_pton res: %d\n",res);  
+        PRINT("inet_pton res: %d\n",res);  
         //m_server_ip.clear();  
     }
 
@@ -317,13 +340,13 @@ public:
         {
             m_socket = Raw_socket(AF_INET, SOCK_STREAM, 0);
 
-            printf("m_socket: ");
+            PRINT("m_socket: ");
             m_socket.print();
 
             if (!m_socket.valid())
             {
-                printf("error\n");
-                //printf("WSAGetLastError(): %d\n",WSAGetLastError());
+                PRINT("error\n");
+                //PRINT("WSAGetLastError(): %d\n",WSAGetLastError());
             }
             else
             {                
@@ -348,7 +371,7 @@ public:
         }
         else
         {
-            printf("not initialized\n"); 
+            PRINT("not initialized\n"); 
         }
 
         return m_initialized;
@@ -370,7 +393,9 @@ public:
         res = getaddrinfo(m_server_ip.c_str(), std::to_string(m_server_port).c_str(), &hints, &servinfo);
         if (res != 0) 
         {
-            fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+            //fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
+            PRINT("getaddrinfo: %s\n", gai_strerror(res));
+
             return m_initialized;
         }
 
@@ -415,8 +440,8 @@ public:
             const char* inet_ntop_res = inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, INET6_ADDRSTRLEN);
             if (inet_ntop_res != nullptr)
             {
-                printf("client: connected to %s\n", s);
-                //printf("client: connected to %s\n", inet_ntop_res);
+                PRINT("client: connected to %s\n", s);
+                //PRINT("client: connected to %s\n", inet_ntop_res);
             }
 
             
@@ -431,7 +456,8 @@ public:
 
         if (!m_socket.valid())
         {
-            fprintf(stderr, "client: failed to connect\n");
+            //fprintf(stderr, "client: failed to connect\n");
+            PRINT("client: failed to connect\n");
             return m_initialized;
         }
 
@@ -457,7 +483,7 @@ public:
     {
         if (m_initialized)
         {
-            printf("already initialized!\n");
+            PRINT("already initialized!\n");
             return true;
         }
 
@@ -494,8 +520,8 @@ public:
             res = m_socket.setsockop_bool(SO_REUSEADDR, true);
         }
 
-        printf("setsockopt res: %d\n", res);
-        //printf("get_last_error(): %d\n", m_socket.get_last_error());
+        PRINT("setsockopt res: %d\n", res);
+        //PRINT("get_last_error(): %d\n", m_socket.get_last_error());
 
         return res;
     }
@@ -503,10 +529,10 @@ public:
     int bind()
     {
         int res = m_socket.bind((const sockaddr *)&m_addr, sizeof(m_addr));
-        printf("bind res: %d\n", res);
+        PRINT("bind res: %d\n", res);
         if (res == SOCKET_ERROR)
         {
-            printf("bind error: %d\n",  m_socket.get_last_error());
+            PRINT("bind error: %d\n",  m_socket.get_last_error());
         }
         return res;
     }
@@ -517,13 +543,13 @@ public:
         if (m_initialized)
         {
             res = m_socket.listen(backlog);
-            printf("listen res: %d\n",res);
-            printf("listen m_socket: ");
+            PRINT("listen res: %d\n",res);
+            PRINT("listen m_socket: ");
             m_socket.print();
         }
         else
         {
-            printf("not initialized\n");
+            PRINT("not initialized\n");
         }
 
         return res;
@@ -582,7 +608,8 @@ public:
         m_initialized(false),
         m_socket(Simple_socket(true)),
         m_socket_set({0}),
-        m_socket_list()
+        m_socket_list(),
+        m_message(nullptr)
         #ifdef _WIN32
         ,m_dummy_socket(INVALID_SOCKET)
         #else
@@ -623,7 +650,7 @@ public:
     {
         if(!m_initialized)
         {        
-            printf("calling m_socket.init\n");
+            PRINT("calling m_socket.init\n");
             bool valid = m_socket.init(ip_address, port);
             if (valid)
             {    
@@ -638,14 +665,14 @@ public:
                     m_dummy_socket = Raw_socket(AF_INET, SOCK_STREAM, 0);
                     if (m_dummy_socket.valid())
                     {
-                        printf("dummy socket: ");
+                        PRINT("dummy socket: ");
                         m_dummy_socket.print();
                         add_socket_to_select(m_dummy_socket);
                         m_initialized = true;
                     }
                     #else
                     res = pipe(pfd);
-                    printf("pipe(pfd): %d\n", res);
+                    PRINT("pipe(pfd): %d\n", res);
 
                     if(res != SOCKET_ERROR)
                     {
@@ -723,12 +750,13 @@ public:
         client_disconnected,
         client_error,
         rx,
-        exit,    
+        exit,   
+        interrupt 
     };
 
-    static std::string Event_code_to_string(Event_code e)
+    static const char* Event_code_to_string(Event_code e)
     {
-        std::string s = "";
+        const char* s = "";
 
         switch(e)
         {
@@ -751,8 +779,10 @@ public:
             s = "rx";       
             break;
             case Event_code::exit:
-            s = "exit";
+            s = "exit";            
             break;
+            case Event_code::interrupt:
+            s = "interrupt";    
         }
 
         return s;
@@ -767,22 +797,34 @@ public:
         int bytes_available;      
         std::string to_string() const
         {
-            //std::string s = "0";
-            auto s = Event_code_to_string(event_code);
-            s[0] += int(event_code);
+            std::string s = "(0)";
+            s[1] += int(event_code);
+            s += Event_code_to_string(event_code);                        
             return s;
         }  
     };
 
-    void exit()
+    void exit_message()
     {
         #if defined(_WIN32)
         auto m_dummy_socket_copy = m_dummy_socket;        
         m_dummy_socket_copy.close();        
         #else
-        printf("writing exit\n");
+        PRINT("writing exit\n");
         int res = write(pfd[1], "x", 1);
-        printf("write(): %d\n", res);
+        PRINT("write(): %d\n", res);
+        #endif
+    }
+
+    void custom_message(void* message)
+    {
+        #if defined(_WIN32)
+        auto m_dummy_socket_copy = m_dummy_socket;        
+        m_dummy_socket_copy.close();        
+        #else
+        PRINT("writing exit\n");
+        int res = write(pfd[1], "x", 1);
+        PRINT("write(): %d\n", res);
         #endif
     }
 
@@ -800,22 +842,22 @@ public:
                 int res = select(m_largest_fd+1, &event_read_set, NULL, NULL, NULL);
             #endif
 
-            printf("select res: %d\n",res);
+            PRINT("select res: %d\n",res);
             if(res == SOCKET_ERROR)
             {
                 int error = m_socket.get_raw_socket().get_last_error();
-                printf("select error: %d\n", error);            
+                PRINT("select error: %d\n", error);            
             }
 
             auto m_socket_list_copy = m_socket_list;
             for(const auto& raw_socket: m_socket_list_copy)
             {
-                printf("checking events for: ");
+                PRINT("checking events for: ");
                 raw_socket.print();
                 
                 if (FD_ISSET(raw_socket.get_native(), &event_read_set)) //new event 
                 { 
-                    printf("read event for socket: ");
+                    PRINT("read event for socket: ");
                     raw_socket.print();
 
                     if (raw_socket == m_socket.get_raw_socket()) //server event
@@ -823,17 +865,17 @@ public:
                         struct sockaddr_storage remoteaddr; // client address                   
                         socklen_t addrlen = sizeof(remoteaddr);    
 
-                        printf("server_event\n");
+                        PRINT("server_event\n");
                         Raw_socket new_socket = m_socket.get_raw_socket().accept((struct sockaddr *)&remoteaddr, &addrlen);
 
                         if (!new_socket.valid())
                         {
                             int error = m_socket.get_raw_socket().get_last_error();
-                            printf("accept failed error: %d\n", error);
+                            PRINT("accept failed error: %d\n", error);
 
                             if(error == 10038)
                             {
-                                printf("WSAENOTSOCK\n");
+                                PRINT("WSAENOTSOCK\n");
                             }
 
                             m_socket.get_raw_socket().mark_as_closed();
@@ -852,7 +894,7 @@ public:
                             const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
                             uint16_t port = ntohs(get_in_port((struct sockaddr*)&remoteaddr));
 
-                            printf("selectserver: new connection from %s:%u on socket ", address, port);
+                            PRINT("selectserver: new connection from %s:%u on socket ", address, port);
                             new_socket.print();
 
                             Event event = {Event_code::client_connected, raw_socket, 0};
@@ -862,12 +904,12 @@ public:
                     #if defined(_WIN32)
                     else if (raw_socket == m_dummy_socket) //exit event
                     {
-                        printf("m_dummy_socket event\n");
+                        PRINT("m_dummy_socket event\n");
 
                         // uint8_t buffer[1024];
                         // int peek = raw_socket.recv((char*)buffer, sizeof(buffer), MSG_PEEK);
 
-                        // printf("peek: %d\n", peek);
+                        // PRINT("peek: %d\n", peek);
 
                         Event event = {Event_code::exit, INVALID_SOCKET, 0};
                         events.push_back(event);
@@ -878,11 +920,11 @@ public:
 
                     else if (raw_socket == pfd[0]) //exit event
                     {
-                        printf("self pipe event\n");
+                        PRINT("self pipe event\n");
 
                         char buffer[10+1]="";
                         read(pfd[0],buffer, sizeof(buffer)-1);
-                        printf("received: %s\n", buffer);
+                        PRINT("received: %s\n", buffer);
 
                         Event event = {Event_code::exit, INVALID_SOCKET, 0};
                         events.push_back(event);
@@ -895,7 +937,7 @@ public:
                         uint8_t buffer[1024];
                         int peek = raw_socket.recv((char*)buffer, sizeof(buffer), MSG_PEEK);
 
-                        printf("peek: %d\n", peek);
+                        PRINT("peek: %d\n", peek);
 
                         if (peek < 0)
                         {
@@ -954,10 +996,12 @@ public:
     fd_set m_socket_set;
     std::list<Raw_socket> m_socket_list;
 
+    void* m_message;
     #ifdef _WIN32
     Raw_socket m_dummy_socket;
     #else
     int m_largest_fd;
     int pfd[2]; //both ends of pipe: {read,write}
     #endif
+
 };
