@@ -4,7 +4,7 @@ on:
     branches:
       - master
       - develop
-      - refactor_client
+      - interrupt_server
   pull_request:
     branches:
       - master

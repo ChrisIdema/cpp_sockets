@@ -270,6 +270,7 @@ int test3()
         while(running)
         {
             auto events = p_server->wait_for_events();
+            PRINT("wait_for_events returned:\n");  
             for(const auto& event: events)
             {
                 PRINT("event: %s\n", event.to_string().c_str());  
@@ -288,21 +289,25 @@ int test3()
         }
     }, &server, &received_by_server);
 
-    std::this_thread::sleep_for(100ms);
-    server.custom_message("Hello world!");
-    server.custom_message("Hello again!");
-    server.custom_message("Bye!");
+    //std::this_thread::sleep_for(100ms);
+    server.custom_message(to_server[0]);
+    server.custom_message(to_server[1]);
+    server.custom_message(to_server[2]);
     std::this_thread::sleep_for(100ms);
     server.exit_message();
     server_thread.join();
 
-    for(const auto& message: received_by_server)
+
+    PRINT("to_server==received_by_server: %d\n", to_server==received_by_server);   
+
+    if (to_server==received_by_server)
     {
-        PRINT("message: \"%s\"\n", message);   
+        return 0;
     }
-
-
-    return 0;
+    else
+    {
+        return -1;
+    }
 }
 
 
@@ -312,30 +317,30 @@ int main()
 
     int res;
     
-    // res = test1();
+    res = test1();
 
-    // if (res != 0)
-    // {
-    //     fprintf(stderr, RED "[ERROR]" NC ": test1() failed!\n");
-    //     return res;// Error: Process completed with exit code 255.
-    // }
-    // else
-    // {
-    //     printf(GREEN "[SUCCESS]" NC ": test1() succeeded!\n");
-    // }
+    if (res != 0)
+    {
+        fprintf(stderr, RED "[ERROR]" NC ": test1() failed!\n");
+        return res;// Error: Process completed with exit code 255.
+    }
+    else
+    {
+        printf(GREEN "[SUCCESS]" NC ": test1() succeeded!\n");
+    }
     
 
-    // res = test2();
+    res = test2();
 
-    // if (res != 0)
-    // {
-    //     fprintf(stderr, RED "[ERROR]" NC ": test2() failed!\n");
-    //     return res;// Error: Process completed with exit code 255.
-    // }
-    // else
-    // {
-    //     printf(GREEN "[SUCCESS]" NC ": test2() succeeded!\n");
-    // }
+    if (res != 0)
+    {
+        fprintf(stderr, RED "[ERROR]" NC ": test2() failed!\n");
+        return res;// Error: Process completed with exit code 255.
+    }
+    else
+    {
+        printf(GREEN "[SUCCESS]" NC ": test2() succeeded!\n");
+    }
 
     res = test3();
 
