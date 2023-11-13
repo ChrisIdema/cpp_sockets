@@ -171,7 +171,7 @@ class Raw_socket
         int res = SOCKET_ERROR;
         if (valid())
         {            
-            #ifdef WIN32
+            #ifdef _WIN32
                 res = ::closesocket(m_socket);
             #else
                 res = ::close(m_socket);
@@ -215,7 +215,7 @@ class Raw_socket
     int setsockop_bool(int optname, bool value) const
     {
         int res;
-        #ifdef WIN32
+        #ifdef _WIN32
         //https://learn.microsoft.com/en-us/windows/win32/api/winsock/nf-winsock-setsockopt
         const BOOL converted_param = value;        
         res = ::setsockopt(m_socket, SOL_SOCKET, optname, (char *)&converted_param, sizeof(converted_param));
@@ -603,7 +603,7 @@ private:
 class Socket_waiter
 {
 public:
-    Socket_waiter(bool server)
+    Socket_waiter(bool server=false)
         : 
         m_server(server),
         m_initialized(false),
@@ -855,12 +855,14 @@ public:
         {           
             fd_set event_read_set = m_socket_set; //select modifies set, so make a copy
 
-            PRINT("select\n");
             #if defined(_WIN32)
-                int res = select(0, &event_read_set, NULL, NULL, NULL);
+                const int nfds = 0; // don't care
             #else
-                int res = select(m_largest_fd+1, &event_read_set, NULL, NULL, NULL);
+                const int nfds = m_largest_fd+1;
             #endif
+
+            PRINT("select\n");
+            int res = select(nfds, &event_read_set, NULL, NULL, NULL);
 
             PRINT("select res: %d\n",res);
             if(res == SOCKET_ERROR)
@@ -871,13 +873,20 @@ public:
                 //closing dummy socket before select causes error     
 
                 #if defined(_WIN32)
-                    if(error == 10038) // WSAENOTSOCK. select was called with a closed dummy socket
+                    if(error == 10038) // WSAENOTSOCK
                     {
-                        PRINT("WSAENOTSOCK (dummy socket probably closed before select()\n");
+                        PRINT("WSAENOTSOCK\n");
+                        if (m_messages.size() != 0) 
+                        {
+                            PRINT("Dummy socket was probably closed before select\n");  
+                        }
                     }                    
                 #endif
+
+                FD_ZERO(&event_read_set); // clear set, because it can generate a false event for server socket, which causes accept() to freeze
             }
 
+            // read messages even if select res==SOCKET_ERROR, because closing dummy socket before select causes errors
             {
                 std::lock_guard<std::mutex> guard(m_message_mutex);
                 if (m_messages.size() != 0) 
@@ -889,9 +898,9 @@ public:
                     remove_socket_from_select(m_dummy_socket);    
                     m_dummy_socket.mark_as_closed(); //do not close as it was already closed
 
-                    //add dummy socket back:
+                    //add a new dummy socket back:
                     m_dummy_socket = Raw_socket(AF_INET, SOCK_STREAM, 0);
-                    PRINT("dummy socket: ");
+                    PRINT("new dummy socket: ");
                     m_dummy_socket.print();
                     add_socket_to_select(m_dummy_socket);     
                     #else                     
@@ -917,8 +926,13 @@ public:
                         }
                     }
                     m_messages.clear();
-                    return events;
                 }
+            }
+
+            if(res == SOCKET_ERROR)
+            {
+                // return because there is nothing to check in event_read_set
+                return events; 
             }
 
             auto m_socket_list_copy = m_socket_list;
@@ -939,7 +953,7 @@ public:
 
                         PRINT("server_event\n");
                         Raw_socket new_socket = m_socket.get_raw_socket().accept((struct sockaddr *)&remoteaddr, &addrlen);
-
+                        PRINT("accept was called\n");
                         new_socket.print();
 
                         if (!new_socket.valid())
@@ -962,6 +976,8 @@ public:
                         } 
                         else 
                         {
+                            PRINT("add_socket_to_select: ");
+                            new_socket.print();
                             add_socket_to_select(new_socket);
             
                             char remoteIP[INET6_ADDRSTRLEN];
@@ -978,12 +994,16 @@ public:
                     #if defined(_WIN32)
                     else if (raw_socket == m_dummy_socket) //interrupt event
                     {
-                        PRINT("m_dummy_socket event\n");                   
+                        PRINT("m_dummy_socket event\n");
+                        //messages already processed before this loop, but keep this condition here to distiquish between client event and interrupt event    
+                        //alternatively dummy socket or self pipe can be removed from list, but this is less elegant              
                     }
                     #else
                     else if (raw_socket == pfd[0]) //interrupt event
                     {                        
-                        PRINT("self pipe event\n");                    
+                        PRINT("self pipe event\n");  
+                        //messages already processed before this loop, but keep this condition here to distiquish between client event and interrupt event
+                        //alternatively dummy socket or self pipe can be removed from list, but this is less elegant
                     }                    
                     #endif
                     else //client event

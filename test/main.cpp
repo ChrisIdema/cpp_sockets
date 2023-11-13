@@ -31,7 +31,7 @@ static void server_thread_function(Server_params* params)
 {
     std::this_thread::sleep_for(500ms);//delay so connecting client too early is tested
 
-    Socket_waiter server;
+    Socket_waiter server(true);
     server.init(params->server_ip, params->server_port);
 
     if(params->exit_test)
@@ -258,7 +258,7 @@ int test2()
 
 int test3()
 {
-    Socket_waiter server;
+    Socket_waiter server(true);
     server.init("127.0.0.1", 60000);
 
     const std::vector<const char*> to_server={"Hello world!", "Hello again!", "Bye!"};
