@@ -861,7 +861,7 @@ public:
                 const int nfds = m_largest_fd+1;
             #endif
 
-            PRINT("select\n");
+            //PRINT("select\n");
             int res = select(nfds, &event_read_set, NULL, NULL, NULL);
 
             PRINT("select res: %d\n",res);
@@ -953,8 +953,8 @@ public:
 
                         PRINT("server_event\n");
                         Raw_socket new_socket = m_socket.get_raw_socket().accept((struct sockaddr *)&remoteaddr, &addrlen);
-                        PRINT("accept was called\n");
-                        new_socket.print();
+                        // PRINT("accept was called\n");
+                        // new_socket.print();
 
                         if (!new_socket.valid())
                         {
