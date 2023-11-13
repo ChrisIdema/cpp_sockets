@@ -1,5 +1,5 @@
 # Simple C++ Sockets
-[![build](https://github.com/ChrisIdema/cpp_sockets/actions/workflows/ci.yml/badge.svg?branch=interrupt_server)](https://github.com/ChrisIdema/cpp_sockets/actions/workflows/ci.yml)
+[![build](https://github.com/ChrisIdema/cpp_sockets/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/ChrisIdema/cpp_sockets/actions/workflows/ci.yml)
 
 
 Simple library for TCP sockets in C++. Server and client use select to receive events.
