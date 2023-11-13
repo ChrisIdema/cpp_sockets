@@ -310,6 +310,133 @@ int test3()
     }
 }
 
+int test4()
+{
+    Socket_waiter server(true);
+    server.init("127.0.0.1", 60000);
+
+    std::vector<std::string> received_by_server;
+
+    std::thread server_thread([](Socket_waiter* p_server, std::vector<std::string>* p_received_by_server)
+    {
+        bool running = true;
+
+        while(running)
+        {
+            auto events = p_server->wait_for_events();
+            PRINT("server_thread wait_for_events returned:\n");  
+            for(const auto& event: events)
+            {
+                PRINT("server_thread event: %s\n", event.to_string().c_str());  
+                if(event.event_code == Socket_waiter::Event_code::exit)
+                {
+                    running = false;
+                    break;
+                }   
+                else if(event.event_code == Socket_waiter::Event_code::rx)
+                {
+                    PRINT("event.bytes_available = %d\n", event.bytes_available);
+                    if(event.bytes_available==1)
+                    {
+                        char buffer[1+1] = "";
+                        int numbytes = event.client.recv(buffer, sizeof(buffer)-1,0);
+
+                        if (numbytes == -1) //error
+                        {
+                            PRINT("numbytes == -1");
+                                        
+                        }
+                        else if(numbytes == 0) // closed
+                        {
+                            PRINT("numbytes == 0");
+                        }
+                        else
+                        {
+                            buffer[numbytes] = '\0';
+                            PRINT("server: received(%d) '%s'\n",numbytes, buffer);  
+                            p_received_by_server->push_back(buffer);
+                        } 
+
+                        if(buffer[0]=='1')
+                        {
+                            event.client.send("2", 1, 0); // response
+                        }
+                    }
+                }       
+            }
+        }
+    }, &server, &received_by_server);
+
+
+    Socket_waiter client(false);
+    client.init("127.0.0.1", 60000);
+
+    std::vector<std::string> received_by_client;
+
+    std::thread client_thread([](Socket_waiter* p_client, std::vector<std::string>* p_received_by_client)
+    {
+        bool running = true;
+
+        p_client->get_raw_socket().send("1", 1);
+		         
+        while(running)
+        {
+            auto events = p_client->wait_for_events();
+            PRINT("client_thread wait_for_events returned:\n");  
+            for(const auto& event: events)
+            {
+                PRINT("client_thread event: %s\n", event.to_string().c_str());  
+                if(event.event_code == Socket_waiter::Event_code::exit)
+                {
+                    running = false;
+                    break;
+                }
+          
+                else if(event.event_code == Socket_waiter::Event_code::rx)            
+                {     
+                    char buffer[1 + 1];  
+                    auto numbytes = p_client->get_raw_socket().recv(buffer, sizeof(buffer)-1);
+               
+                    if (numbytes == -1) //error
+                    {
+                        PRINT("numbytes == -1");
+                                    
+                    }
+                    else if(numbytes == 0) // closed
+                    {
+                        PRINT("numbytes == 0");
+                    }
+                    else
+                    {
+                        buffer[numbytes] = '\0';
+                        PRINT("client: received(%d) '%s'\n",numbytes, buffer);  
+                        p_received_by_client->push_back(buffer);
+                    }  
+                }     
+            }
+        }
+    }, &client, &received_by_client);
+
+
+    std::this_thread::sleep_for(100ms);
+    server.exit_message();
+    server_thread.join();
+    client.exit_message();
+    client_thread.join();
+
+    if (received_by_server.size() != 1 || received_by_server[0] != "1")
+    {
+        return -1;
+    }
+
+    if (received_by_client.size() != 1 || received_by_client[0] != "2")
+    {
+        return -1;
+    }
+
+    return 0;
+}
+
 
 int main() 
 {
@@ -322,7 +449,7 @@ int main()
     if (res != 0)
     {
         fprintf(stderr, RED "[ERROR]" NC ": test1() failed!\n");
-        return res;// Error: Process completed with exit code 255.
+        return res;// Error: Process completed with exit code 1.
     }
     else
     {
@@ -335,7 +462,7 @@ int main()
     if (res != 0)
     {
         fprintf(stderr, RED "[ERROR]" NC ": test2() failed!\n");
-        return res;// Error: Process completed with exit code 255.
+        return res;// Error: Process completed with exit code 1.
     }
     else
     {
@@ -347,14 +474,24 @@ int main()
     if (res != 0)
     {
         fprintf(stderr, RED "[ERROR]" NC ": test3() failed!\n");
-        return res;// Error: Process completed with exit code 255.
+        return res; // Error: Process completed with exit code 1.
     }
     else
     {
         printf(GREEN "[SUCCESS]" NC ": test3() succeeded!\n");
     }
 
+    res = test4();
 
+    if (res != 0)
+    {
+        fprintf(stderr, RED "[ERROR]" NC ": test4() failed!\n");
+        return res; // Error: Process completed with exit code 1.
+    }
+    else
+    {
+        printf(GREEN "[SUCCESS]" NC ": test4() succeeded!\n");
+    }
 
     return 0; 
 }
