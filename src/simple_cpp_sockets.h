@@ -90,8 +90,8 @@ class Simple_socket_library
 
 #else
 
-//typedef int Simple_socket_library;
-#define Simple_socket_library
+typedef int Simple_socket_library;
+//#define Simple_socket_library
 
 #define SOCKET_FORMAT_STRING "%d"
 
