@@ -88,11 +88,9 @@ class Simple_socket_library
 #define SOCKET_FORMAT_STRING "%u"
 #endif
 
-#else
-
-[[maybe_unused]] typedef int Simple_socket_library;
+#else // Linux
+#define Simple_socket_library [[maybe_unused]]int
 #define SOCKET_FORMAT_STRING "%d"
-
 #endif
 
 
