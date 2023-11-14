@@ -915,7 +915,7 @@ public:
                         if (message == nullptr)
                         {
                             PRINT("received exit message\n");
-                            Event event = {Event_code::exit, INVALID_SOCKET, 0};
+                            Event event = {Event_code::exit, INVALID_SOCKET, 0, nullptr};
                             events.push_back(event);
                         }
                         else
@@ -987,7 +987,7 @@ public:
                             PRINT("selectserver: new connection from %s:%u on socket ", address, port);
                             new_socket.print();
 
-                            Event event = {Event_code::client_connected, raw_socket, 0};
+                            Event event = {Event_code::client_connected, new_socket, 0};
                             events.push_back(event);
                         }
                     }
