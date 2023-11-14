@@ -14,6 +14,15 @@ using namespace std::chrono_literals;
 #define GREEN "\033[0;32m"
 #define NC    "\033[0m"
 
+void simple_cpp_sockets_printf(const char * pString, ...)
+{
+    static std::mutex mutex;
+    std::lock_guard<std::mutex> guard(mutex);
+    va_list args;
+    va_start(args, pString);
+    vprintf(pString, args);
+    va_end(args);
+}
 
 struct Server_params
 {
@@ -69,6 +78,9 @@ static void server_thread_function(Server_params* params)
                         if(event.event_code == Socket_waiter::Event_code::client_connected)
                         {
                             state = 1;
+                            #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
+                            PRINT("Client connected from: %s:%u\n", event.client_ip.c_str() , event.client_port);
+                            #endif
                         }
                         else
                         {
@@ -298,7 +310,7 @@ int test3()
     server_thread.join();
 
 
-    PRINT("to_server==received_by_server: %d\n", to_server==received_by_server);   
+    PRINT("to_server %c= received_by_server\n", to_server==received_by_server ? '=':'!');   
 
     if (to_server==received_by_server)
     {

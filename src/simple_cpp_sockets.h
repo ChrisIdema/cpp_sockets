@@ -29,20 +29,9 @@ typedef int SOCKET;
 #include <mutex>
 #include <stdarg.h>
 
-
-void my_print(const char * pString, ...)
-{
-    static std::mutex mutex;
-    std::lock_guard<std::mutex> guard(mutex);
-    va_list args;
-    va_start(args, pString);
-    vprintf(pString, args);
-    va_end(args);
-}
-
-
-#ifdef SIMPLE_CPP_SOCKETS_PRINT
-#define PRINT(...) my_print(__VA_ARGS__)
+#ifdef SIMPLE_CPP_SOCKETS_DEBUG_PRINT
+void simple_cpp_sockets_printf(const char * pString, ...);
+#define PRINT(...) simple_cpp_sockets_printf(__VA_ARGS__)
 #else
 #define PRINT(...) 
 #endif
@@ -88,8 +77,7 @@ class Simple_socket_library
 
     private:
     WSADATA m_wsa;
-    bool m_initialized;
-   
+    bool m_initialized;   
 };
 
 
@@ -102,7 +90,8 @@ class Simple_socket_library
 
 #else
 
-typedef int Simple_socket_library;
+//typedef int Simple_socket_library;
+#define Simple_socket_library
 
 #define SOCKET_FORMAT_STRING "%d"
 
@@ -188,15 +177,15 @@ class Raw_socket
         m_socket = INVALID_SOCKET;
     }
 
-    int bind(const struct sockaddr* name, int namelen)
+    int bind(const struct sockaddr* name, size_t namelen)
     {
-        int res = ::bind(m_socket, name, namelen);
+        int res = ::bind(m_socket, name, int(namelen));
         return res;
     }
 
-    int connect(const struct sockaddr* name, int namelen)
+    int connect(const struct sockaddr* name, size_t namelen)
     {
-        int res = ::connect(m_socket, name, namelen);
+        int res = ::connect(m_socket, name, int(namelen));
         return res;
     }
 
@@ -238,7 +227,7 @@ class Raw_socket
     }
 
 
-    int send(const char* buffer, size_t length, int flags=0) const
+    int send(const char* buffer, int length, int flags=0) const
     {
         int res = SOCKET_ERROR;
         if (valid() && buffer != nullptr && length>0 && length<=INT32_MAX)
@@ -248,7 +237,7 @@ class Raw_socket
         return res;    
     }
 
-    int recv(char* buffer, size_t length, int flags=0) const
+    int recv(char* buffer, int length, int flags=0) const
     {
         int res = SOCKET_ERROR;
         if (valid() && buffer != nullptr && length>0 && length<=INT32_MAX)
@@ -436,13 +425,12 @@ public:
 
             m_socket = temp_socket;
         
-            char s[INET6_ADDRSTRLEN]="";
-            const char* inet_ntop_res = inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, INET6_ADDRSTRLEN);
-            if (inet_ntop_res != nullptr)
-            {
-                PRINT("client: connected to %s\n", s);
-                //PRINT("client: connected to %s\n", inet_ntop_res);
-            }
+            // char s[INET6_ADDRSTRLEN]="";
+            // const char* inet_ntop_res = inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, INET6_ADDRSTRLEN);
+            // if (inet_ntop_res != nullptr)
+            // {
+            //     PRINT("client: connected to %s\n", s);
+            // }
 
             
             m_initialized = true;
@@ -566,7 +554,7 @@ public:
     }
 
 
-    int send(const char* buffer, size_t length, int flags=0)
+    int send(const char* buffer, int length, int flags=0)
     {
         int res = -1;
         if (m_initialized && !m_server && buffer != nullptr && length>0 && length<=INT32_MAX)
@@ -576,7 +564,7 @@ public:
         return res;      
     }
 
-    int recv(char* buffer, size_t length, int flags=0)
+    int recv(char* buffer, int length, int flags=0)
     {
         int res = -1;
         if (m_initialized && !m_server && buffer != nullptr && length>0 && length<=INT32_MAX)
@@ -807,11 +795,15 @@ public:
         Event_code event_code;
         Raw_socket client;
         int bytes_available;
-        const void* message;      
+        const void* message;  
+        #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
+        std::string client_ip; 
+        uint16_t client_port;
+        #endif    
         std::string to_string() const
         {
             std::string s = "(0)";
-            s[1] += int(event_code);
+            s[1] += char(event_code);
             s += Event_code_to_string(event_code);                        
             return s;
         }  
@@ -980,14 +972,17 @@ public:
                             new_socket.print();
                             add_socket_to_select(new_socket);
             
-                            char remoteIP[INET6_ADDRSTRLEN];
-                            const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
-                            uint16_t port = ntohs(get_in_port((struct sockaddr*)&remoteaddr));
-
-                            PRINT("selectserver: new connection from %s:%u on socket ", address, port);
-                            new_socket.print();
-
                             Event event = {Event_code::client_connected, new_socket, 0};
+
+                            #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
+                                char remoteIP[INET6_ADDRSTRLEN];
+                                const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
+                                uint16_t port = ntohs(get_in_port((struct sockaddr*)&remoteaddr));
+
+                                event.client_ip = address;
+                                event.client_port = port;
+                            #endif
+
                             events.push_back(event);
                         }
                     }
