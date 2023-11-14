@@ -90,9 +90,7 @@ class Simple_socket_library
 
 #else
 
-typedef int Simple_socket_library;
-//#define Simple_socket_library
-
+[[maybe_unused]] typedef int Simple_socket_library;
 #define SOCKET_FORMAT_STRING "%d"
 
 #endif
@@ -100,7 +98,7 @@ typedef int Simple_socket_library;
 
 
 // get sockaddr, IPv4 or IPv6:
-static void *get_in_addr(struct sockaddr *sa)
+static inline void *get_in_addr(struct sockaddr *sa)
 {
     if (sa->sa_family == AF_INET)
     {
@@ -110,7 +108,7 @@ static void *get_in_addr(struct sockaddr *sa)
     return &(((struct sockaddr_in6*)sa)->sin6_addr);
 }
 
-static uint16_t get_in_port(struct sockaddr *sa)
+static inline uint16_t get_in_port(struct sockaddr *sa)
 {
     if (sa->sa_family == AF_INET)
     {
