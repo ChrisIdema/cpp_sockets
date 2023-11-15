@@ -38,7 +38,7 @@ Types:
 - `SOCKET` is not a class, but the native type for a socket. In Linux this is an int and in Windows a unsigned int containing a pointer (64-bit or 32-bit)
 - `Raw_socket` is a class that is a basic wrapper for the native socket type to aid in type checking and easier syntax. It has no member other than the native socket. Purposely doesn't close upon destruction.
 - `Simple_socket` is a class that provides easy initialization of its Raw_socket member for server or client. Closes upon destruction.
-- `Socket_waiter` is a class that allows servers and clients to wait for events using wait_for_events
+- `Socket_waiter` is a class that allows servers and clients to wait for events using wait_for_events()
 - `Socket_waiter::Event` contains the event code (enum) and other relevant data, wait_for_events returns a vector of events
 
 ## Notes
