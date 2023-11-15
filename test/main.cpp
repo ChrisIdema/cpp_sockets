@@ -9,6 +9,7 @@ using namespace std::chrono_literals;
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <stdarg.h>
 
 #define RED   "\033[0;31m"
 #define GREEN "\033[0;32m"
