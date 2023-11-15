@@ -11,23 +11,19 @@ typedef SSIZE_T ssize_t;
 
 // Linux
 #else
-#include <sys/socket.h>
-//#include <sys/types.h>
-#include <netdb.h>
-#include <arpa/inet.h> // This contains inet_addr
-#include <unistd.h> // This contains close
-#include <fcntl.h>
+#include <netdb.h>      // for getaddrinfo(), gai_strerror()
+#include <arpa/inet.h>  // for inet_pton(), inet_ntop()
+#include <unistd.h>     // for read(),write(),close()
+#include <fcntl.h>      // for fcntl() for self pipe
 #define INVALID_SOCKET (SOCKET)(~0)
 #define SOCKET_ERROR (-1)
-typedef int SOCKET;
+typedef int SOCKET; // native type for a socket
 #endif
 
 #include <string>
 #include <vector>
 #include <list>
-
 #include <mutex>
-#include <stdarg.h>
 
 #ifdef SIMPLE_CPP_SOCKETS_DEBUG_PRINT
 void simple_cpp_sockets_printf(const char * pString, ...);
@@ -38,7 +34,7 @@ void simple_cpp_sockets_printf(const char * pString, ...);
 
 #if defined(_WIN32)
 
-
+//instance to run this library (needed on Windows only, optional for Linux)
 class Simple_socket_library
 {
     public:
@@ -89,6 +85,7 @@ class Simple_socket_library
 #endif
 
 #else // Linux
+//instance to run this library (needed on Windows only, optional for Linux)
 #define Simple_socket_library [[maybe_unused]]int
 #define SOCKET_FORMAT_STRING "%d"
 #endif
@@ -117,7 +114,7 @@ static inline uint16_t get_in_port(struct sockaddr *sa)
 }
 
 
-//raw socket only stores native socket type and has no other state, reading error codes may not be thread safe, no automatic closing
+//basic wrapper for the native socket type to aid in type checking and easier syntax. It has no member other than the native socket. Purposely doesn't close upon destruction.
 class Raw_socket
 {
     public:
@@ -263,7 +260,7 @@ class Raw_socket
 };
 
 
-
+//provides easy initialization of its Raw_socket member for server or client. Closes upon destruction.
 class Simple_socket {
 public:
     Simple_socket(bool server=false)
@@ -330,33 +327,28 @@ public:
 
             if (!m_socket.valid())
             {
-                PRINT("error\n");
-                //PRINT("WSAGetLastError(): %d\n",WSAGetLastError());
+                PRINT("get_last_error(): %d\n", m_socket.get_last_error());
             }
             else
             {                
                 m_addr.sin_family = AF_INET;
-                /*int res = bind();
-                if (res != SOCKET_ERROR)
-                {
-                    res = set_options();  
-                }*/
-                
                 int res = set_options();
                 if (res != SOCKET_ERROR)
                 {
                     res = bind();  
                 }
 
-
-                //todo process errors
-
+                if (res == SOCKET_ERROR)
+                {
+                    m_socket.close();
+                }
+               
                 m_initialized = res != SOCKET_ERROR;
             }
         }
         else
         {
-            PRINT("not initialized\n"); 
+            PRINT("address not initialized\n"); 
         }
 
         return m_initialized;
@@ -378,7 +370,6 @@ public:
         res = getaddrinfo(m_server_ip.c_str(), std::to_string(m_server_port).c_str(), &hints, &servinfo);
         if (res != 0) 
         {
-            //fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(res));
             PRINT("getaddrinfo: %s\n", gai_strerror(res));
 
             return m_initialized;
@@ -427,24 +418,19 @@ public:
             // {
             //     PRINT("client: connected to %s\n", s);
             // }
-
             
             m_initialized = true;
-            break;         
-     
+            break;        
         }
-
 
         freeaddrinfo(servinfo); // all done with this structure
         servinfo = nullptr;
 
         if (!m_socket.valid())
         {
-            //fprintf(stderr, "client: failed to connect\n");
             PRINT("client: failed to connect\n");
             return m_initialized;
         }
-
     
         return m_initialized;        
     }
@@ -572,7 +558,6 @@ public:
     }
 
 private:
-
     Raw_socket m_socket;
     sockaddr_in m_addr;
     std::string m_server_ip;
@@ -583,7 +568,7 @@ private:
 };
 
 
-
+//allows servers and clients to wait for events using wait_for_events()
 class Socket_waiter
 {
 public:
