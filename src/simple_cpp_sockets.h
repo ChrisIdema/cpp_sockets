@@ -774,13 +774,14 @@ public:
     struct Event
     {
         Event_code event_code;
-        Raw_socket client;
-        int bytes_available;
-        const void* message;  
+        Raw_socket client = INVALID_SOCKET;
+        int bytes_available = 0;
+        const void* message = nullptr;
         #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
-        std::string client_ip; 
-        uint16_t client_port;
+        std::string client_ip="";
+        uint16_t client_port=0;
         #endif    
+
         std::string to_string() const
         {
             std::string s = "(0)";
@@ -888,7 +889,7 @@ public:
                         if (message == nullptr)
                         {
                             PRINT("received exit message\n");
-                            Event event = {Event_code::exit, INVALID_SOCKET, 0, nullptr};
+                            Event event = {Event_code::exit};
                             events.push_back(event);
                         }
                         else
@@ -942,7 +943,7 @@ public:
                             m_socket.get_raw_socket().mark_as_closed();
                             m_socket.close();
 
-                            Event event= {Event_code::not_initialized, INVALID_SOCKET, 0};
+                            Event event= {Event_code::not_initialized};
                             events.push_back(event);
                             return events;
                             
@@ -953,7 +954,7 @@ public:
                             new_socket.print();
                             add_socket_to_select(new_socket);
             
-                            Event event = {Event_code::client_connected, new_socket, 0};
+                            Event event = {Event_code::client_connected, new_socket};
 
                             #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
                                 char remoteIP[INET6_ADDRSTRLEN];
@@ -993,7 +994,7 @@ public:
                         {
                             //error
 
-                            Event event = {Event_code::client_error, raw_socket, 0};
+                            Event event = {Event_code::client_error, raw_socket};
                             events.push_back(event);
 
                             remove_socket_from_select(raw_socket);
@@ -1036,7 +1037,7 @@ public:
         }
         else
         {
-            Event event= {Event_code::not_initialized, INVALID_SOCKET, 0};
+            Event event= {Event_code::not_initialized};
             events.push_back(event);
         }
 
