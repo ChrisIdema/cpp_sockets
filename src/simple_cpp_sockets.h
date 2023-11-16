@@ -90,17 +90,27 @@ class Simple_socket_library
 #define SOCKET_FORMAT_STRING "%d"
 #endif
 
-
-
 // get sockaddr, IPv4 or IPv6:
 static inline void *get_in_addr(struct sockaddr *sa)
 {
     if (sa->sa_family == AF_INET)
     {
-        return &(((struct sockaddr_in*)sa)->sin_addr);
+        return &reinterpret_cast<sockaddr_in*>(sa)->sin_addr;
     }
 
-    return &(((struct sockaddr_in6*)sa)->sin6_addr);
+    return &reinterpret_cast<sockaddr_in6*>(sa)->sin6_addr;
+}
+
+static inline uint32_t in_addr_to_uint32(struct sockaddr *sa)
+{
+
+    if (sa->sa_family == AF_INET)
+    {
+        return ntohl(reinterpret_cast<sockaddr_in*>(sa)->sin_addr.s_addr);
+    }
+    {
+        return 0;
+    }
 }
 
 static inline uint16_t get_in_port(struct sockaddr *sa)
@@ -778,7 +788,8 @@ public:
         int bytes_available = 0;
         const void* message = nullptr;
         #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
-        std::string client_ip="";
+        std::string client_ip_str="";
+        uint32_t client_ip4=0;
         uint16_t client_port=0;
         #endif    
 
@@ -956,12 +967,15 @@ public:
             
                             Event event = {Event_code::client_connected, new_socket};
 
+
+
                             #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
                                 char remoteIP[INET6_ADDRSTRLEN];
-                                const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr((struct sockaddr*)&remoteaddr),  remoteIP, INET6_ADDRSTRLEN);
+                                const char* address = inet_ntop(remoteaddr.ss_family, get_in_addr(reinterpret_cast<struct sockaddr*>(&remoteaddr)),  remoteIP, INET6_ADDRSTRLEN);
                                 uint16_t port = ntohs(get_in_port((struct sockaddr*)&remoteaddr));
 
-                                event.client_ip = address;
+                                event.client_ip4 = in_addr_to_uint32(reinterpret_cast<sockaddr*>(&remoteaddr));
+                                event.client_ip_str = address;
                                 event.client_port = port;
                             #endif
 
