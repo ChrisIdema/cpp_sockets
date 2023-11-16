@@ -1043,6 +1043,12 @@ public:
         return events;
     }
 
+    void close_client(Raw_socket client)
+    {
+        remove_socket_from_select(client);
+        client.close();
+    }
+
     std::list<Raw_socket> get_client_list()
     {
         std::list<Raw_socket> client_list = m_socket_list;
