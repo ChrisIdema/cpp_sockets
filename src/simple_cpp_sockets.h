@@ -742,7 +742,8 @@ public:
         client_error,
         rx,
         exit,   
-        interrupt 
+        interrupt ,
+        timeout
     };
 
     static const char* Event_code_to_string(Event_code e)
@@ -774,6 +775,10 @@ public:
             break;
             case Event_code::interrupt:
             s = "interrupt";    
+            break;
+            case Event_code::timeout:
+            s = "timeout";
+            break;
         }
 
         return s;
@@ -832,7 +837,7 @@ public:
         }
     }
 
-    std::vector<Event> wait_for_events()
+    std::vector<Event> wait_for_events(int32_t timeout_ms = -1)
     {
         std::vector<Event> events;
 
@@ -846,8 +851,18 @@ public:
                 const int nfds = m_largest_fd+1;
             #endif
 
+            struct timeval* p_timeout = nullptr;
+
+            struct timeval timeout;
+            if(timeout_ms>=0)
+            {
+                timeout.tv_sec  = timeout_ms / 1000;
+                timeout.tv_usec = (timeout_ms % 1000) * 1000;
+                p_timeout = &timeout;
+            }
+
             //PRINT("select\n");
-            int res = select(nfds, &event_read_set, NULL, NULL, NULL);
+            int res = select(nfds, &event_read_set, NULL, NULL, p_timeout);
 
             PRINT("select res: %d\n",res);
             if(res == SOCKET_ERROR)
@@ -920,6 +935,7 @@ public:
                 return events; 
             }
 
+            bool read_set_event = false;
             auto m_socket_list_copy = m_socket_list;
             for(const auto& raw_socket: m_socket_list_copy)
             {
@@ -928,6 +944,7 @@ public:
                 
                 if (FD_ISSET(raw_socket.get_native(), &event_read_set)) //new event 
                 { 
+                    read_set_event = true;
                     PRINT("read event for socket: ");
                     raw_socket.print();
 
@@ -1047,6 +1064,12 @@ public:
                         }
                     }
                 }
+            } // for(const auto& raw_socket: m_socket_list_copy)
+
+            if (!read_set_event && res != SOCKET_ERROR && timeout_ms > 0) // assume timeout if no error or event reported by select
+            {
+                Event event= {Event_code::timeout};
+                events.push_back(event);
             }
         }
         else
