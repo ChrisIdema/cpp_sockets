@@ -1,26 +1,35 @@
-name: Build
+name: Build and test on Windows and Linux
 on:
   push:
     branches:
       - master
+      - develop
   pull_request:
     branches:
       - master
 
 jobs:
-  build-windows:
+  build-and-test-windows:
     runs-on: windows-latest
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Build on Windows
-        run: cl main.cpp
-        working-directory: ./src
-
-  build-linux:
+        run: cl test/main.cpp -Isrc /EHsc /std:c++17 -DSIMPLE_CPP_SOCKETS_DEBUG_PRINT
+        working-directory: .
+      - name: test on Windows
+        run: ./main.exe
+        working-directory: . 
+  build-and-test-linux:
     runs-on: ubuntu-latest
+    timeout-minutes: 2
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
       - name: Build on Linux
-        run: g++ main.cpp -o main
-        working-directory: ./src
+        run: g++ -std=c++17 -Wall test/main.cpp -o main -Isrc -DSIMPLE_CPP_SOCKETS_DEBUG_PRINT
+        working-directory: .
+      - name: test on Linux
+        run: ./main
+        working-directory: .
+

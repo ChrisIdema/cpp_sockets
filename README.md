@@ -1,72 +1,55 @@
 # Simple C++ Sockets
-*A header-only implementation of TCP and UDP sockets in C++*
+[![build](https://github.com/ChrisIdema/cpp_sockets/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/ChrisIdema/cpp_sockets/actions/workflows/ci.yml)
+
+
+Simple library for TCP sockets in C++. Server and client use select to receive events.
 
 ## Description
-This is a very simple header-only library to use network sockets in C++.
 
-There is also a simple application to demonstrate its functionality.
-
-It uses classes, inheritance and other modern C++ features.
-
-Really this library is not that big of a deal and most sources suggest using a library like Boost because of the error-prone nature of programming sockets. 
+Originally forked from https://github.com/computersarecool/cpp_sockets 
+I reimplemented the library to be event-based using select(). This allows the server thread to simply wait for events instead of polling or blocking on certain calls. I removed UDP.
+In addition to socket events such as connect, disconnect and receive Socket_waiter can also receive custom messages.
 
 ## Tested On
 - Linux
 - Windows
 
-## To Build
-- The library `simple_cpp_sockets.h` is header-only (just include it in your project).
-
+## Build
 - To build and run the test application on Linux open a terminal and run:
-    - `cd src`
-    - `g++ main.cpp -o main`
+    - `g++ -std=c++17 test/main.cpp -o main -Isrc -DSIMPLE_CPP_SOCKETS_DEBUG_PRINT`
     - `./main`
 
 - To build and run the test application on Windows either use Visual Studio directly or open the `Developer Command Prompt` and run:
-    - `cd src`
-    - `cl main.cpp`
+    - `cl test/main.cpp -Isrc /EHsc /std:c++17 -DSIMPLE_CPP_SOCKETS_DEBUG_PRINT`
     - `start main.exe`
+    - If you want to include "windows.h" you need to define `WIN32_LEAN_AND_MEAN` or it will include the older winsock header file (winsock.h)
 
-## Functionality
-`main.cpp` is a simple functioning example (not all errors are handled gracefully). 
-
-The compiled test application is a CLI that allows you to interactively create a:
-
-- UDP or TCP
-- server or client
-
-By asking for:
-- protocol
-- client or server
-
-If client:
-- destination IP address
-- destination port
-
-If server:
-- port on which to listen
-
-
-
-## To Use
-`simple_cpp_sockets.h` contains classes for UDP and TCP servers and clients.
-
-An example looks like:
-```
-UDPServer server(socket_port);
-int bind_status = server.socket_bind();
-```
-Look at `main.cpp` for the a complete example.
+- defines
+    - `SIMPLE_CPP_SOCKETS_DEBUG_PRINT` enables debug printing inside the library
+    - `SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS` adds client address to event
 
 ## Project Structure
+Files:
 - `src/simple_cpp_sockets.h` is the library
-- `src/main.cpp` is a demo application
+- `test/main.cpp` is a demo application/unit test
 
-## Extra Notes
-- There is [a lot more that could be done](https://beej.us/guide/bgnet/) but this is outside the goals of this project
+Types:
+- `Simple_socket_library` instance to run this library (needed on Windows only, optional for Linux)
+- `SOCKET` is not a class, but the native type for a socket. In Linux this is an int and in Windows a unsigned int containing a pointer (64-bit or 32-bit)
+- `Raw_socket` is a class that is a basic wrapper for the native socket type to aid in type checking and easier syntax. It has no member other than the native socket. Purposely doesn't close upon destruction.
+- `Simple_socket` is a class that provides easy initialization of its Raw_socket member for server or client. Closes upon destruction.
+- `Socket_waiter` is a class that allows servers and clients to wait for events using wait_for_events()
+- `Socket_waiter::Event` contains the event code (enum) and other relevant data, wait_for_events returns a vector of events
+
+## Notes
+- In order the break from select() you can add an unopened dummy socket in windows and close it, in Linux you can add a pipe. This is used to interrupt the thread of the server or client.
+- Closing a socket in Windows before select() causes an error and also returns false events in the read set. The code handles this situation properly.
+
+## Links
+- [Popular tutorial on sockets](https://beej.us/guide/bgnet/) 
+- [list of WSA error codes (Windows only)](https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2)
 	
 ### License
 
-:copyright: Willy Nolan 2017
-
 [MIT License](http://en.wikipedia.org/wiki/MIT_License)
+
