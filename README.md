@@ -42,8 +42,9 @@ Types:
 - `Socket_waiter::Event` contains the event code (enum) and other relevant data, wait_for_events returns a vector of events
 
 ## Notes
-- In order the break from select() you can add an unopened dummy socket in windows and close it, in Linux you can add a pipe. This is used to interrupt the thread of the server or client.
+- In order the break from select() you can add an unopened dummy socket in windows and close it, in Linux you can add a pipe and send a message. This is used to interrupt the thread of the server or client.
 - Closing a socket in Windows before select() causes an error and also returns false events in the read set. The code handles this situation properly.
+- if a client has multiple ip addresses connect will bind to a random ip. If you want to use a specific ip you need to specify it with client_bind_ip.
 
 ## Links
 - [Popular tutorial on sockets](https://beej.us/guide/bgnet/) 
