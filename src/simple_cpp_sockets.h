@@ -461,8 +461,9 @@ public:
             else
             {
                 res = ::getaddrinfo(m_server_ip.c_str(), server_port_string.c_str(), &hints, &info);
-                if (res == SOCKET_ERROR)
+                if (res != 0 )
                 {
+                    PRINT("getaddrinfo: %s\n", gai_strerror(res));
                     m_socket.close();
                     continue;
                 }
