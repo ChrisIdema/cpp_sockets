@@ -385,84 +385,6 @@ public:
             return m_initialized;
         }
 
-//        struct addrinfo hints={};
-//        struct addrinfo *servinfo=nullptr;
-        //int res;
-
-//        hints.ai_family = AF_UNSPEC;
-//        hints.ai_socktype = SOCK_STREAM;
-//        res = getaddrinfo(m_server_ip.c_str(), std::to_string(m_server_port).c_str(), &hints, &servinfo);
-//        if (res != 0)
-//        {
-//            PRINT("getaddrinfo: %s\n", gai_strerror(res));
-
-//            return m_initialized;
-//        }
-
-//        // loop through all the results and connect to the first we can
-//        for(auto p = servinfo; p != nullptr; p = p->ai_next)
-//        {
-//            // SOCKET temp_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-//            Raw_socket temp_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-
-//            if (!temp_socket.valid())
-//            {
-//                perror("client: socket");
-//                continue;
-//            }
-            
-//            m_socket = temp_socket; // copy for set_options
-//            res = set_options();
-//            m_socket = INVALID_SOCKET;
-            
-//            if (res == SOCKET_ERROR)
-//            {
-//                perror("client set_options()");
-//                temp_socket.close();
-                
-//                continue;
-//            }
-
-//            m_addr.sin_family = AF_INET;
-//            m_socket = temp_socket; // copy for bind
-//            int res = m_socket.bind((const sockaddr *)&m_addr, sizeof(m_addr));
-//            m_socket = INVALID_SOCKET;
-//            PRINT("bind res: %d\n", res);
-//            if (res == SOCKET_ERROR)
-//            {
-//                PRINT("bind error: %d\n",  temp_socket.get_last_error());
-
-//                temp_socket.close();
-//                continue;
-//            }
-
-
-//            res = temp_socket.connect(p->ai_addr, p->ai_addrlen);
-
-//            if (res == SOCKET_ERROR)
-//            {
-//                perror("client connect()");
-//                temp_socket.close();
-                
-//                continue;
-//            }
-
-//            m_socket = temp_socket;
-        
-//            // char s[INET6_ADDRSTRLEN]="";
-//            // const char* inet_ntop_res = inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, INET6_ADDRSTRLEN);
-//            // if (inet_ntop_res != nullptr)
-//            // {
-//            //     PRINT("client: connected to %s\n", s);
-//            // }
-            
-//            m_initialized = true;
-//            break;
-//        }
-
-//        freeaddrinfo(servinfo); // all done with this structure
-//        servinfo = nullptr;
-
         struct addrinfo hints, *info, *info2;
         int res;
 
@@ -479,6 +401,11 @@ public:
         hints.ai_flags = bind_to_ip? 0 : AI_PASSIVE; //AI_PASSIVE fills in my IP
 
         res = ::getaddrinfo(ip_for_getaddrinfo, port_for_getaddrinfo, &hints, &info);
+        if (res != 0)
+        {
+            PRINT("getaddrinfo: %s\n", gai_strerror(res));
+            return false;
+        }
 
         for(auto p = info; p != nullptr; p = p->ai_next)
         {
@@ -511,8 +438,9 @@ public:
                 hints.ai_socktype = SOCK_STREAM;
 
                 res = ::getaddrinfo(m_server_ip.c_str(), server_port_string.c_str(), &hints, &info2);
-                if (res == SOCKET_ERROR)
+                if (res != 0)
                 {
+                    PRINT("getaddrinfo: %s\n", gai_strerror(res));
                     m_socket.close();
                     freeaddrinfo(info2);
                     info2 = nullptr;
@@ -638,6 +566,7 @@ public:
         if (res == SOCKET_ERROR)
         {
             PRINT("bind error: %d\n",  m_socket.get_last_error());
+            PRINT("server: %d\n", m_server);
         }
         return res;
     }
