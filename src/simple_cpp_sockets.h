@@ -24,6 +24,7 @@ typedef int SOCKET; // native type for a socket
 #include <vector>
 #include <list>
 #include <mutex>
+#include <cstring>
 
 #ifdef SIMPLE_CPP_SOCKETS_DEBUG_PRINT
 void simple_cpp_sockets_printf(const char * pString, ...);
@@ -279,18 +280,20 @@ public:
         m_addr(),
         m_server_ip(""),
         m_server_port(0),
+        m_client_bind_ip(""),
         m_address_valid(false),
         m_initialized(false),        
         m_server(server)
     {
     }
 
-    Simple_socket(bool server, std::string ip_address, uint16_t port)
+    Simple_socket(bool server, std::string ip_address, uint16_t port, std::string client_bind_ip ="")
         : 
         m_socket(INVALID_SOCKET),
         m_addr(),
         m_server_ip(ip_address),
         m_server_port(port),
+        m_client_bind_ip(client_bind_ip),
         m_address_valid(false),
         m_initialized(false),
         m_server(server)
@@ -301,7 +304,8 @@ public:
         }
         else // client
         {
-            m_address_valid = true;
+            //m_address_valid = true;
+            set_address_client();
         }
     }
 
@@ -313,6 +317,16 @@ public:
         m_address_valid = res != INVALID_SOCKET; 
         PRINT("inet_pton res: %d\n",res);  
         //m_server_ip.clear();  
+    }
+
+    void set_address_client()
+    {
+        //m_server_ip.clear();
+        int res = inet_pton(AF_INET, "172.20.0.6", &m_addr.sin_addr);
+        m_addr.sin_port = htons(60001);
+        m_address_valid = res != INVALID_SOCKET;
+        PRINT("inet_pton res: %d\n",res);
+        //m_server_ip.clear();
     }
 
 
@@ -371,75 +385,179 @@ public:
             return m_initialized;
         }
 
-        struct addrinfo hints={};
-        struct addrinfo *servinfo=nullptr;
+//        struct addrinfo hints={};
+//        struct addrinfo *servinfo=nullptr;
+        //int res;
+
+//        hints.ai_family = AF_UNSPEC;
+//        hints.ai_socktype = SOCK_STREAM;
+//        res = getaddrinfo(m_server_ip.c_str(), std::to_string(m_server_port).c_str(), &hints, &servinfo);
+//        if (res != 0)
+//        {
+//            PRINT("getaddrinfo: %s\n", gai_strerror(res));
+
+//            return m_initialized;
+//        }
+
+//        // loop through all the results and connect to the first we can
+//        for(auto p = servinfo; p != nullptr; p = p->ai_next)
+//        {
+//            // SOCKET temp_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+//            Raw_socket temp_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
+
+//            if (!temp_socket.valid())
+//            {
+//                perror("client: socket");
+//                continue;
+//            }
+            
+//            m_socket = temp_socket; // copy for set_options
+//            res = set_options();
+//            m_socket = INVALID_SOCKET;
+            
+//            if (res == SOCKET_ERROR)
+//            {
+//                perror("client set_options()");
+//                temp_socket.close();
+                
+//                continue;
+//            }
+
+//            m_addr.sin_family = AF_INET;
+//            m_socket = temp_socket; // copy for bind
+//            int res = m_socket.bind((const sockaddr *)&m_addr, sizeof(m_addr));
+//            m_socket = INVALID_SOCKET;
+//            PRINT("bind res: %d\n", res);
+//            if (res == SOCKET_ERROR)
+//            {
+//                PRINT("bind error: %d\n",  temp_socket.get_last_error());
+
+//                temp_socket.close();
+//                continue;
+//            }
+
+
+//            res = temp_socket.connect(p->ai_addr, p->ai_addrlen);
+
+//            if (res == SOCKET_ERROR)
+//            {
+//                perror("client connect()");
+//                temp_socket.close();
+                
+//                continue;
+//            }
+
+//            m_socket = temp_socket;
+        
+//            // char s[INET6_ADDRSTRLEN]="";
+//            // const char* inet_ntop_res = inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, INET6_ADDRSTRLEN);
+//            // if (inet_ntop_res != nullptr)
+//            // {
+//            //     PRINT("client: connected to %s\n", s);
+//            // }
+            
+//            m_initialized = true;
+//            break;
+//        }
+
+//        freeaddrinfo(servinfo); // all done with this structure
+//        servinfo = nullptr;
+
+        struct addrinfo hints, *info, *info2;
         int res;
 
-        hints.ai_family = AF_UNSPEC;
+        bool bind_to_ip = m_client_bind_ip != "";
+        auto server_port_string = std::to_string(m_server_port);
+
+        const char* ip_for_getaddrinfo = bind_to_ip ? m_client_bind_ip.c_str() : m_server_ip.c_str();
+        const char* port_for_getaddrinfo = bind_to_ip ? nullptr : server_port_string.c_str();
+
+        // first, load up address structs with getaddrinfo():
+        memset(&hints, 0, sizeof hints);
+        hints.ai_family = AF_UNSPEC;  // use IPv4 or IPv6, whichever
         hints.ai_socktype = SOCK_STREAM;
-        res = getaddrinfo(m_server_ip.c_str(), std::to_string(m_server_port).c_str(), &hints, &servinfo);
-        if (res != 0) 
+        hints.ai_flags = bind_to_ip? 0 : AI_PASSIVE; //AI_PASSIVE fills in my IP
+
+        res = ::getaddrinfo(ip_for_getaddrinfo, port_for_getaddrinfo, &hints, &info);
+
+        for(auto p = info; p != nullptr; p = p->ai_next)
         {
-            PRINT("getaddrinfo: %s\n", gai_strerror(res));
+            m_socket = Raw_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
 
-            return m_initialized;
-        }
-
-        // loop through all the results and connect to the first we can
-        for(auto p = servinfo; p != nullptr; p = p->ai_next) 
-        {
-            // SOCKET temp_socket = socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-            Raw_socket temp_socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-
-            if (!temp_socket.valid()) 
+            if (!m_socket.valid())
             {
-                perror("client: socket");
                 continue;
+
             }
-            
-            m_socket = temp_socket; // copy for set_options
+
             res = set_options();
-            m_socket = INVALID_SOCKET;
-            
-            if (res == SOCKET_ERROR) 
+            if (res == SOCKET_ERROR)
             {
-                perror("client set_options()");
-                temp_socket.close();
-                
+                m_socket.close();
                 continue;
             }
 
-
-            res = temp_socket.connect(p->ai_addr, p->ai_addrlen);
-
-            if (res == SOCKET_ERROR) 
+            if (bind_to_ip)
             {
-                perror("client connect()");
-                temp_socket.close();
-                
-                continue;
+                res = m_socket.bind(p->ai_addr, p->ai_addrlen);
+                if (res == SOCKET_ERROR)
+                {
+                    m_socket.close();
+                    continue;
+                }
+
+                memset(&hints, 0, sizeof hints);
+                hints.ai_family = AF_UNSPEC;  // use IPv4 or IPv6, whichever
+                hints.ai_socktype = SOCK_STREAM;
+
+                res = ::getaddrinfo(m_server_ip.c_str(), server_port_string.c_str(), &hints, &info2);
+                if (res == SOCKET_ERROR)
+                {
+                    m_socket.close();
+                    freeaddrinfo(info2);
+                    info2 = nullptr;
+                    continue;
+                }
+
+                res = m_socket.connect(info2->ai_addr, info2->ai_addrlen);
+                freeaddrinfo(info2);
+                info2 = nullptr;
+
+                if (res == SOCKET_ERROR)
+                {
+                    m_socket.close();
+                    continue;
+                }
+
+            }
+            else
+            {
+                res = ::getaddrinfo(m_server_ip.c_str(), server_port_string.c_str(), &hints, &info);
+                if (res == SOCKET_ERROR)
+                {
+                    m_socket.close();
+                    continue;
+                }
+
+                res = m_socket.connect(info->ai_addr, info->ai_addrlen);
+
+                if (res == SOCKET_ERROR)
+                {
+                    m_socket.close();
+                    continue;
+                }
             }
 
-            m_socket = temp_socket;
-        
-            // char s[INET6_ADDRSTRLEN]="";
-            // const char* inet_ntop_res = inet_ntop(p->ai_family, get_in_addr((struct sockaddr *)p->ai_addr), s, INET6_ADDRSTRLEN);
-            // if (inet_ntop_res != nullptr)
-            // {
-            //     PRINT("client: connected to %s\n", s);
-            // }
-            
             m_initialized = true;
-            break;        
+            break;
         }
 
-        freeaddrinfo(servinfo); // all done with this structure
-        servinfo = nullptr;
+        ::freeaddrinfo(info);
+        info = nullptr;
 
         if (!m_socket.valid())
         {
             PRINT("client: failed to connect\n");
-            return m_initialized;
         }
     
         return m_initialized;        
@@ -447,6 +565,12 @@ public:
 
     bool init(void)
     {
+        if (m_initialized)
+        {
+            PRINT("already initialized!\n");
+            return true;
+        }
+
         if (m_server)
         {
             return init_server();
@@ -459,7 +583,7 @@ public:
 
 
 
-    bool init(std::string ip_address, uint16_t port)
+    bool init(std::string ip_address, uint16_t port, std::string client_bind_ip ="")
     {
         if (m_initialized)
         {
@@ -469,6 +593,7 @@ public:
 
         m_server_ip = ip_address;
         m_server_port = port;
+        m_client_bind_ip = client_bind_ip;
 
         if (m_server)
         {
@@ -572,6 +697,7 @@ private:
     sockaddr_in m_addr;
     std::string m_server_ip;
     uint16_t m_server_port;
+    std::string m_client_bind_ip;
     bool m_address_valid;
     bool m_initialized;
     bool m_server;
@@ -634,12 +760,12 @@ public:
 
     bool is_initialized() const{return m_initialized;}
 
-    bool init(std::string ip_address, uint16_t port, uint8_t number_of_connections=10)
+    bool init(std::string ip_address, uint16_t port, std::string client_bind_ip ="", uint8_t number_of_connections=10)
     {
         if(!m_initialized)
         {        
             PRINT("calling m_socket.init\n");
-            bool valid = m_socket.init(ip_address, port);
+            bool valid = m_socket.init(ip_address, port, client_bind_ip);
             if (valid)
             {    
                 int res = 0;
@@ -828,7 +954,7 @@ public:
                 m_dummy_socket_copy.close();     
                 #else
                 PRINT("write data to pipe\n");
-                int res = write(pfd[1], "x", 1);
+                [[maybe_unused]] int res = write(pfd[1], "x", 1);
                 PRINT("write rs: %d\n", res);
                 #endif
             }
@@ -867,7 +993,7 @@ public:
             PRINT("select res: %d\n",res);
             if(res == SOCKET_ERROR)
             {
-                int error = m_socket.get_raw_socket().get_last_error();
+                [[maybe_unused]] int error = m_socket.get_raw_socket().get_last_error();
                 PRINT("select error: %d\n", error);   
 
                 //closing dummy socket before select causes error     
