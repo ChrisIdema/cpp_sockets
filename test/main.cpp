@@ -97,11 +97,11 @@ static void server_thread_function(Server_params* params)
                             if(event.bytes_available==1)
                             {
                                 char buffer[1+1] = "";
-                                event.client.recv(buffer, sizeof(buffer)-1,0);
+                                event.client_socket.recv(buffer, sizeof(buffer)-1,0);
                                 if(buffer[0]=='1')
                                 {
                                     state = 2;
-                                    event.client.send("2", 1, 0); // response
+                                    event.client_socket.send("2", 1, 0); // response
                                 }
                             }
                         }
@@ -367,7 +367,7 @@ int test4()
                     if(event.bytes_available==1)
                     {
                         char buffer[1+1] = "";
-                        int numbytes = event.client.recv(buffer, sizeof(buffer)-1,0);
+                        int numbytes = event.client_socket.recv(buffer, sizeof(buffer)-1,0);
 
                         if (numbytes == -1) //error
                         {
@@ -387,7 +387,7 @@ int test4()
 
                         if(buffer[0]=='1')
                         {
-                            event.client.send("2", 1, 0); // response
+                            event.client_socket.send("2", 1, 0); // response
                         }
                     }
                 }   

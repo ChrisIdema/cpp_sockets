@@ -435,8 +435,7 @@ public:
         }
         else // client
         {
-            //m_address_valid = true;
-            set_address_client();
+            
         }
     }
 
@@ -445,16 +444,6 @@ public:
         //m_server_ip.clear();
         int res = inet_pton(AF_INET, m_server_ip.c_str(), &m_addr.sin_addr);
         m_addr.sin_port = htons(m_server_port);
-        m_address_valid = res != INVALID_SOCKET;
-        PRINT("inet_pton res: %d\n",res);
-        //m_server_ip.clear();
-    }
-
-    void set_address_client()
-    {
-        //m_server_ip.clear();
-        int res = inet_pton(AF_INET, m_client_bind_ip.c_str(), &m_addr.sin_addr);
-        m_addr.sin_port = htons(50000);
         m_address_valid = res != INVALID_SOCKET;
         PRINT("inet_pton res: %d\n",res);
         //m_server_ip.clear();
@@ -694,9 +683,9 @@ public:
         res = m_socket.setsockop_bool(SO_EXCLUSIVEADDRUSE, true);
         #else
         res = m_socket.setsockop_bool(SO_REUSEADDR, true); // SO_REUSEADDR
-        #endif     
+        #endif
 
-        PRINT("setsockop_bool res: %d\n", res); 
+        PRINT("setsockop_bool res: %d\n", res);
 
         return res;
     }
@@ -987,7 +976,7 @@ public:
     struct Event
     {
         Event_code event_code;
-        Raw_socket client = INVALID_SOCKET;
+        Raw_socket client_socket = INVALID_SOCKET;
         int bytes_available = 0;
         const void* message = nullptr;
         #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
