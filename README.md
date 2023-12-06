@@ -7,8 +7,8 @@ Simple library for TCP sockets in C++. Server and client use select to receive e
 ## Description
 
 Originally forked from https://github.com/computersarecool/cpp_sockets 
-I reimplemented the library to be event-based using select(). This allows the server thread to simply wait for events instead of polling or blocking on certain calls. I removed UDP.
-In addition to socket events such as connect, disconnect and receive Socket_waiter can also receive custom messages.
+I reimplemented the library to be event-based with a single blocking function using a select(). This allows the server or client thread to simply wait for events instead of manually polling. I removed UDP.
+In addition to socket events such as connect, disconnect and receive Socket_waiter can also receive custom messages to interrupt the thread.
 
 ## Tested On
 - Linux
@@ -41,10 +41,50 @@ Types:
 - `Socket_waiter` is a class that allows servers and clients to wait for events using wait_for_events()
 - `Socket_waiter::Event` contains the event code (enum) and other relevant data, wait_for_events returns a vector of events
 
-## Notes
+
+## keepalive for timeouts
+
+In order to enable socket timeouts you need to manually set the socket options to enable keepalive:
+
+```
+int res = 0;
+if (res != SOCKET_ERROR)
+{
+    //enable keep alive
+    res = my_socket.setsockop_bool(SO_KEEPALIVE, true); 
+}
+
+if (res != SOCKET_ERROR)
+{
+    //number of retries
+    res = my_socket.setsockop_int(TCP_KEEPCNT, 1, SOL_TCP); 
+}
+
+if (res != SOCKET_ERROR)
+{
+    // delay in seconds after idle to start sending keepalive
+    res = my_socket.setsockop_int(TCP_KEEPIDLE, 1, SOL_TCP);
+}
+
+if (res != SOCKET_ERROR)
+{
+    // interval in seconds
+    res = my_socket.setsockop_int(TCP_KEEPINTVL, 1, SOL_TCP);
+}
+```
+
+After a timeout you will receive the event `Socket_waiter::Event_code::client_error`
+It is recommended to enable socket timeouts on both sides. Since the timeout is a multiple of 1 second this method is not suitable for realtime systems. Alternatively you can create implement your own heartbeat packet between server and client.
+
+## Detect unpluging or deleting IP of a server with no connected clients
+
+TCP has no features to report failure of layers below it. Without any connected clients it cannot detect failures that prevent clients from connecting. One workarround is to connect a dummy client to the server on the same device as the server and enable keepalive. If the IP address gets removed if cable gets unplugged it gets a timeout and you can assume the connection is broken.
+
+## Misc
 - In order the break from select() you can add an unopened dummy socket in windows and close it, in Linux you can add a pipe and send a message. This is used to interrupt the thread of the server or client.
 - Closing a socket in Windows before select() causes an error and also returns false events in the read set. The code handles this situation properly.
-- if a client has multiple ip addresses connect will bind to a random ip. If you want to use a specific ip you need to specify it with client_bind_ip.
+- if a client has multiple ip addresses connect will bind to a random ip. If you want to use a specific ip you need to specify it with the optional parameter client_bind_ip.
+- a client socket will use a random port to connect to the specified server port. You can specify a port with the optional parameter client_bind_port
 
 ## Links
 - [Popular tutorial on sockets](https://beej.us/guide/bgnet/) 
