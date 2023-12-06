@@ -412,19 +412,21 @@ public:
         m_server_ip(""),
         m_server_port(0),
         m_client_bind_ip(""),
+        m_client_bind_port(0),
         m_address_valid(false),
         m_initialized(false),
         m_server(server)
     {
     }
 
-    Simple_socket(bool server, std::string ip_address, uint16_t port, std::string client_bind_ip ="")
+    Simple_socket(bool server, std::string ip_address, uint16_t port, std::string client_bind_ip ="", uint16_t client_bind_port = 0)
         :
         m_socket(INVALID_SOCKET),
         m_addr(),
         m_server_ip(ip_address),
         m_server_port(port),
         m_client_bind_ip(client_bind_ip),
+        m_client_bind_port(client_bind_port),
         m_address_valid(false),
         m_initialized(false),
         m_server(server)
@@ -640,7 +642,7 @@ public:
 
 
 
-    bool init(std::string ip_address, uint16_t port, std::string client_bind_ip ="", uint16_t bind_port = 0)
+    bool init(std::string ip_address, uint16_t port, std::string client_bind_ip ="", uint16_t client_bind_port = 0)
     {
         if (m_initialized)
         {
@@ -651,7 +653,7 @@ public:
         m_server_ip = ip_address;
         m_server_port = port;
         m_client_bind_ip = client_bind_ip;
-        m_client_bind_port = bind_port;
+        m_client_bind_port = client_bind_port;
 
         if (m_server)
         {
