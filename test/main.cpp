@@ -45,6 +45,11 @@ static void server_thread_function(Server_params* params)
 
     Socket_waiter server(true);
     bool initialized = server.init(params->server_ip, params->server_port);
+    if (!initialized)
+    {
+        params->valid = false;
+        return;
+    }
 
     if(params->exit_test)
     {
