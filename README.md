@@ -7,7 +7,7 @@ Simple library for TCP sockets in C++. Server and client use select to receive e
 ## Description
 
 Originally forked from https://github.com/computersarecool/cpp_sockets 
-I reimplemented the library to be event-based with a single blocking function using a select(). This allows the server or client thread to simply wait for events instead of manually polling. I removed UDP.
+I reimplemented the library to be event-based with a single blocking function using a select(). This allows the server or client thread to simply wait for events in a loop instead of manually polling. This is I removed UDP.
 In addition to socket events such as connect, disconnect and receive Socket_waiter can also receive custom messages to interrupt the thread.
 
 ## Tested On
