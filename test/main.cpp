@@ -15,6 +15,8 @@ using namespace std::chrono_literals;
 #define GREEN "\033[0;32m"
 #define NC    "\033[0m"
 
+#define TCP_PORT 60000
+
 void simple_cpp_sockets_printf(const char * pString, ...)
 {
     static std::mutex mutex;
@@ -42,7 +44,12 @@ static void server_thread_function(Server_params* params)
     std::this_thread::sleep_for(500ms);//delay so connecting client too early is tested
 
     Socket_waiter server(true);
-    server.init(params->server_ip, params->server_port);
+    bool initialized = server.init(params->server_ip, params->server_port);
+    if (!initialized)
+    {
+        params->valid = false;
+        return;
+    }
 
     if(params->exit_test)
     {
@@ -80,7 +87,7 @@ static void server_thread_function(Server_params* params)
                         {
                             state = 1;
                             #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
-                            PRINT("Client connected from: %s:%u\n", event.client_ip.c_str() , event.client_port);
+                            PRINT("Client connected from: %s:%u\n", event.client_ip_str.c_str() , event.client_port);
                             #endif
                         }
                         else
@@ -95,11 +102,11 @@ static void server_thread_function(Server_params* params)
                             if(event.bytes_available==1)
                             {
                                 char buffer[1+1] = "";
-                                event.client.recv(buffer, sizeof(buffer)-1,0);
+                                event.client_socket.recv(buffer, sizeof(buffer)-1,0);
                                 if(buffer[0]=='1')
                                 {
                                     state = 2;
-                                    event.client.send("2", 1, 0); // response
+                                    event.client_socket.send("2", 1, 0); // response
                                 }
                             }
                         }
@@ -150,7 +157,8 @@ static void client_thread_function(Client_params* params)
     }
     else
     {
-        Simple_socket client_socket(false);
+
+    Simple_socket client_socket(false);
 
 	bool retry;
 	do{
@@ -159,9 +167,14 @@ static void client_thread_function(Client_params* params)
 
 		while(!success)
 		{
-		    success = client_socket.init(params->server_ip.c_str(),params->server_port);
+            //success = client_socket.init(params->server_ip.c_str(),params->server_port);
+            //success = client_socket.init(params->server_ip.c_str(),params->server_port, "0.0.0.0", 0);
+            //success = client_socket.init(params->server_ip.c_str(),params->server_port, params->server_ip.c_str(), 0);
+		    //success = client_socket.init(params->server_ip.c_str(),params->server_port, "", ,params->server_port+1);
+            success = client_socket.init(params->server_ip.c_str(),params->server_port, params->server_ip.c_str(), params->server_port+1);
 		    if(!success)
 		    {
+                client_socket = Simple_socket(false);
 		    	PRINT("client_socket.init==false\n");
 		        std::this_thread::sleep_for(100ms);
 		    }
@@ -219,12 +232,12 @@ static void client_thread_function(Client_params* params)
 int test1()
 {
        
-    // Server_params server_params={"0.0.0.0", 60000, false};
-    // Server_params server_params={"", 60000, false};
-    Server_params server_params={"127.0.0.1", 60000, false, false};
+    // Server_params server_params={"0.0.0.0", TCP_PORT, false};
+    // Server_params server_params={"", TCP_PORT, false};
+    Server_params server_params={"127.0.0.1", TCP_PORT, false, false};
 
-    // Client_params client_params={"", 60000, 1, false};
-    Client_params client_params={"127.0.0.1", 60000, 1, false, false};
+    // Client_params client_params={"", TCP_PORT, 1, false};
+    Client_params client_params={"127.0.0.1", TCP_PORT, 1, false, false};
 
 
     std::thread server_thread(server_thread_function, &server_params); 
@@ -234,6 +247,7 @@ int test1()
     client_thread.join();
 
     PRINT("server_params.valid: %d\n", server_params.valid);
+    PRINT("client_params.valid: %d\n", client_params.valid);
 
     if (server_params.valid && client_params.valid)
     {
@@ -247,8 +261,8 @@ int test1()
 
 int test2()
 {       
-    Server_params server_params={"127.0.0.1", 60000, true, false};
-    Client_params client_params={"127.0.0.1", 60000, 1, true, false};
+    Server_params server_params={"127.0.0.1", TCP_PORT, true, false};
+    Client_params client_params={"127.0.0.1", TCP_PORT, 1, true, false};
 
     std::thread server_thread(server_thread_function, &server_params); 
     std::thread client_thread(client_thread_function, &client_params); 
@@ -272,7 +286,7 @@ int test2()
 int test3()
 {
     Socket_waiter server(true);
-    server.init("127.0.0.1", 60000);
+    server.init("127.0.0.1", TCP_PORT);
 
     const std::vector<const char*> to_server={"Hello world!", "Hello again!", "Bye!"};
     std::vector<const char*> received_by_server;
@@ -292,12 +306,18 @@ int test3()
                     running = false;
                     break;
                 }
-                if(event.event_code == Socket_waiter::Event_code::interrupt)            
+                else if(event.event_code == Socket_waiter::Event_code::interrupt)            
                 {     
                     auto message = reinterpret_cast<const char*>(event.message);                    
                     PRINT("message: \"%s\"\n", message);        
                     p_received_by_server->push_back(message);        
-                }            
+                }     
+                else if(event.event_code == Socket_waiter::Event_code::client_connected)
+                {
+                     #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
+                    PRINT("Client connected from: %s:%u\n", event.client_ip_str.c_str() , event.client_port);
+                    #endif
+                }       
             }
         }
     }, &server, &received_by_server);
@@ -326,7 +346,7 @@ int test3()
 int test4()
 {
     Socket_waiter server(true);
-    server.init("127.0.0.1", 60000);
+    server.init("127.0.0.1", TCP_PORT);
 
     std::vector<std::string> received_by_server;
 
@@ -352,7 +372,7 @@ int test4()
                     if(event.bytes_available==1)
                     {
                         char buffer[1+1] = "";
-                        int numbytes = event.client.recv(buffer, sizeof(buffer)-1,0);
+                        int numbytes = event.client_socket.recv(buffer, sizeof(buffer)-1,0);
 
                         if (numbytes == -1) //error
                         {
@@ -372,9 +392,15 @@ int test4()
 
                         if(buffer[0]=='1')
                         {
-                            event.client.send("2", 1, 0); // response
+                            event.client_socket.send("2", 1, 0); // response
                         }
                     }
+                }   
+                else if(event.event_code == Socket_waiter::Event_code::client_connected)
+                {
+                     #ifdef SIMPLE_CPP_SOCKETS_CLIENT_ADDRESS
+                    PRINT("Client connected from: %s:%u\n", event.client_ip_str.c_str() , event.client_port);
+                    #endif
                 }       
             }
         }
@@ -382,7 +408,7 @@ int test4()
 
 
     Socket_waiter client(false);
-    client.init("127.0.0.1", 60000);
+    client.init("127.0.0.1", TCP_PORT);
 
     std::vector<std::string> received_by_client;
 
